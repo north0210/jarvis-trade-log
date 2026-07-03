@@ -1,0 +1,87 @@
+@import url("https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: #05070d;
+  color: #cfeaff;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(56, 189, 248, 0.10), transparent),
+    linear-gradient(rgba(111, 227, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(111, 227, 255, 0.035) 1px, transparent 1px);
+  background-size: 100% 100%, 48px 48px, 48px 48px;
+  min-height: 100vh;
+}
+
+@layer components {
+  .hud-panel {
+    @apply bg-panel/80 border border-line rounded-md shadow-arc backdrop-blur-sm relative;
+  }
+  .hud-panel::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 12px;
+    right: 12px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(111, 227, 255, 0.5), transparent);
+  }
+  .hud-label {
+    @apply text-[11px] tracking-[0.25em] uppercase text-arcdim font-display font-semibold;
+  }
+  .hud-input {
+    @apply bg-void/70 border border-line rounded px-2 py-1.5 text-sm text-arc
+      placeholder:text-arcdim/50 focus:outline-none focus:border-arc/60
+      focus:shadow-arc w-full font-mono;
+  }
+  .hud-btn {
+    @apply font-display font-semibold tracking-widest uppercase text-sm
+      border border-arc/50 text-arc px-4 py-1.5 rounded
+      hover:bg-arc/10 hover:shadow-arc transition-colors;
+  }
+  .hud-btn-danger {
+    @apply font-display font-semibold tracking-widest uppercase text-xs
+      border border-danger/50 text-danger px-2 py-1 rounded
+      hover:bg-danger/10 transition-colors;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media print {
+  /* ナビ・ボタン等は非表示、背景色を印刷（濃紺HUDのまま可読性優先） */
+  header,
+  .no-print {
+    display: none !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    animation: none !important;
+    box-shadow: none !important;
+  }
+  body {
+    background: #05070d !important;
+  }
+  .hud-panel {
+    break-inside: avoid;
+  }
+  .report-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  @page {
+    margin: 12mm;
+  }
+}
