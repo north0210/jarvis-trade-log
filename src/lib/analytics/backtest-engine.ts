@@ -15,6 +15,7 @@ import { calculateRSI } from "@/lib/indicators/rsi";
 import { computeVolumeMetrics } from "@/lib/indicators/volume";
 import { daysBetween } from "@/lib/analysis/trades";
 import type { SeriesPoint } from "./priceCache";
+import { K } from "@/lib/storage/keys";
 
 export interface EngineTrade {
   code: string;
@@ -255,7 +256,7 @@ export function runEngineBacktest(
 }
 
 // ---- Dashboard 用 結果サマリー永続化 ----
-const RESULT_KEY = "jarvis-trade-log:backtest-v2-results";
+const RESULT_KEY = K.backtestV2;
 
 export interface BacktestSummary {
   strategyId: string;

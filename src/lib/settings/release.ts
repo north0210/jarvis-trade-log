@@ -3,7 +3,9 @@
  * 免責同意フラグと初回起動チェックリストの状態を管理する。
  */
 
-const KEY = "jarvis-trade-log:release-checklist";
+import { K } from "@/lib/storage/keys";
+
+const KEY = K.releaseChecklist;
 
 export const DISCLAIMER_TEXT =
   "本アプリの分析結果は投資判断の補助であり、売買を推奨するものではありません。最終判断はユーザー自身で行ってください。";

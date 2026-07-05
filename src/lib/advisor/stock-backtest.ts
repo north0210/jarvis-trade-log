@@ -9,8 +9,9 @@ import type { Strategy } from "@/lib/types";
 import { runEngineBacktest } from "@/lib/analytics/backtest-engine";
 import { runMonteCarlo } from "@/lib/analytics/montecarlo";
 import { getDashboardRuns } from "@/lib/settings/performance";
+import { K } from "@/lib/storage/keys";
 
-const KEY = "jarvis-trade-log:stock-bt-results";
+const KEY = K.stockBtResults;
 
 export interface StockBtResult {
   code: string;

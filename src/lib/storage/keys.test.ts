@@ -179,6 +179,12 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
     expect(K.advisorSnapshots).toBe("jarvis-trade-log:advisor-snapshots");
     expect(K.aiComments).toBe("jarvis-trade-log:advisor-ai-comments");
   });
+
+  it("K が Batch5 の3キーを正しく指す（6-1 変換対象）", () => {
+    expect(K.stockBtResults).toBe("jarvis-trade-log:stock-bt-results");
+    expect(K.backtestV2).toBe("jarvis-trade-log:backtest-v2-results");
+    expect(K.releaseChecklist).toBe("jarvis-trade-log:release-checklist");
+  });
 });
 
 describe("STORAGE_KEYS（レガシー）との整合", () => {
