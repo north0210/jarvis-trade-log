@@ -5,7 +5,9 @@
  *
  * ※ APIキーはここに保存しない（env のみ）。保存するのは ON/OFF のみ。
  */
-const KEY = "jarvis-trade-log:ai-comment-settings";
+import { K } from "@/lib/storage/keys";
+
+const KEY = K.aiCommentSettings;
 
 export interface AICommentSettings {
   enabled: boolean;

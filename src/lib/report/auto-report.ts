@@ -11,6 +11,7 @@ import { ensureSeeded } from "@/lib/storage/strategyRepository";
 import { getCashPosition } from "@/lib/analysis/portfolio";
 import { computeSnapshotFields, getReportSnapshotRepository } from "./snapshot";
 import { notifyReportSaved } from "@/lib/notifications/notification-service";
+import { K } from "@/lib/storage/keys";
 
 export type ReportFrequency = "daily" | "weekly" | "monthly";
 
@@ -21,7 +22,7 @@ export interface AutoReportSettings {
   lastSavedPeriod: string | null;
 }
 
-const KEY = "jarvis-trade-log:auto-report-settings";
+const KEY = K.autoReportSettings;
 const DEFAULTS: AutoReportSettings = { enabled: false, frequency: "daily", lastSavedAt: null, lastSavedPeriod: null };
 
 export function getAutoReportSettings(): AutoReportSettings {

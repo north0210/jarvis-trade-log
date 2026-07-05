@@ -6,6 +6,7 @@
 import type { Stock } from "@/lib/types";
 import { scoreStock, type ScoreResult } from "@/lib/score";
 import { stockFactors, type FactorAnalysis, type FactorKey } from "@/lib/analytics/factor-analysis";
+import { K } from "@/lib/storage/keys";
 
 export interface FactorWeights {
   value: number;
@@ -109,7 +110,7 @@ export function adaptiveScoreStock(
 }
 
 // ---- 設定永続化 ----
-const KEY = "jarvis-trade-log:adaptive-score-settings";
+const KEY = K.adaptiveScoreSettings;
 
 export function getAdaptiveScoreSettings(): AdaptiveScoreSettings {
   if (typeof window === "undefined") return { ...DEFAULT_ADAPTIVE_SETTINGS };

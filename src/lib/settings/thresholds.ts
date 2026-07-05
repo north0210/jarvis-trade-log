@@ -4,7 +4,9 @@
  * alerts.ts / score.ts / types.ts は変更しない。既存の固定値を初期値として踏襲。
  */
 
-const KEY = "jarvis-trade-log:threshold-settings";
+import { K } from "@/lib/storage/keys";
+
+const KEY = K.thresholdSettings;
 
 export type RiskGradeThreshold = "S" | "A" | "B" | "C" | "D";
 
