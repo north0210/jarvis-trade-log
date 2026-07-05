@@ -47,6 +47,12 @@ export type ExcludeReason =
 export interface KeyDef {
   /** localStorage の実キー（不変）。price-cache は動的プレフィックス。 */
   storageKey: string;
+  /**
+   * 参照用の安定識別子（名前付き定数 K のプロパティ名）。
+   * backupKey があればそれと一致。無ければ storageKey サフィックスの camelCase を機械導出。
+   * includeInBackup / excludeReason には一切影響しない（参照の一元化のみが目的）。
+   */
+  refName: string;
   /** BACKUP_ITEMS 内の識別キー（includeInBackup=true のとき使用）。 */
   backupKey?: string;
   /** 表示名。 */
@@ -64,10 +70,10 @@ export interface KeyDef {
 }
 
 /**
- * 全 localStorage キーの中央レジストリ。
+ * 全 localStorage キーの中央レジストリ（refName は下で機械導出して付与）。
  * includeInBackup=false のキーには必ず excludeReason を付す。
  */
-export const KEY_REGISTRY: KeyDef[] = [
+const RAW_KEY_REGISTRY: Omit<KeyDef, "refName">[] = [
   // === コアデータ ===
   { storageKey: "jarvis-trade-log:stocks", backupKey: "stocks", label: "銘柄", kind: "array", unit: "stocks", includeInBackup: true },
   { storageKey: "jarvis-trade-log:holdings", backupKey: "holdings", label: "保有株", kind: "array", unit: "holdings", includeInBackup: true },
@@ -121,6 +127,27 @@ export const KEY_REGISTRY: KeyDef[] = [
   { storageKey: "jarvis-trade-log:price-update-log", label: "価格更新ログ", kind: "array", unit: "settings", includeInBackup: false, excludeReason: "transient" },
 ];
 
+/**
+ * storageKey サフィックス（`jarvis-trade-log:` 除去後）を camelCase 化して refName を機械導出する。
+ * 区切りは `-` と `:`。先頭セグメントは原形維持（既存の camelCase を壊さない）、以降は先頭大文字化。
+ * 例: "price-update-log" → "priceUpdateLog" / "price-cache:" → "priceCache" / "lastBackup" → "lastBackup"
+ */
+function deriveRefName(storageKey: string): string {
+  const prefix = `${BACKUP_APP}:`;
+  const suffix = storageKey.startsWith(prefix) ? storageKey.slice(prefix.length) : storageKey;
+  const parts = suffix.split(/[-:]/).filter(Boolean);
+  return parts.map((p, i) => (i === 0 ? p : p.charAt(0).toUpperCase() + p.slice(1))).join("");
+}
+
+/**
+ * 全 localStorage キーの中央レジストリ。
+ * refName を付与済み: backupKey があればそれ（既存 K プロパティ名と一致）、無ければ storageKey から機械導出。
+ */
+export const KEY_REGISTRY: KeyDef[] = RAW_KEY_REGISTRY.map((k) => ({
+  ...k,
+  refName: k.backupKey ?? deriveRefName(k.storageKey),
+}));
+
 /** バックアップ対象（includeInBackup=true）のみ。backup-service.ts が導出に使用。 */
 export const BACKUP_KEY_DEFS: KeyDef[] = KEY_REGISTRY.filter((k) => k.includeInBackup);
 
@@ -132,14 +159,12 @@ export const BACKUP_KEY_DEFS: KeyDef[] = KEY_REGISTRY.filter((k) => k.includeInB
  * 設計方針（6-1）:
  * - **KEY_REGISTRY から純粋導出**。キー文字列（storageKey）のリテラルはここに一切書かない。
  *   レジストリが唯一の定義源であり、二重定義（＝リネーム時のデータ消失リスク）を再発させない。
- * - プロパティ名は各エントリの `backupKey`（キャメルケース識別子）。
- *   `backupKey` を持つキー（includeInBackup=true）のみを収録する。
+ * - プロパティ名は各エントリの `refName`（backupKey かサフィックス camelCase）。全キーを収録する
+ *   （除外キーも参照一元化の対象。includeInBackup の値には一切影響しない）。
  * - 参照の正しさ（K の値 = レジストリの storageKey）は keys.test.ts の整合テストで保証する。
  *
  * 例: `K.tvEnabled` === "jarvis-trade-log:tv-enabled"
  */
 export const K: Readonly<Record<string, string>> = Object.freeze(
-  Object.fromEntries(
-    KEY_REGISTRY.filter((k) => k.backupKey).map((k) => [k.backupKey as string, k.storageKey]),
-  ),
+  Object.fromEntries(KEY_REGISTRY.map((k) => [k.refName, k.storageKey])),
 );

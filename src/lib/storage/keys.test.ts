@@ -120,18 +120,15 @@ describe("KEY_REGISTRY: 重複なし", () => {
 
 describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", () => {
   it("K の全プロパティが KEY_REGISTRY の storageKey と一致（別ソースの二重定義でない）", () => {
-    const byBackupKey = new Map(
-      KEY_REGISTRY.filter((k) => k.backupKey).map((k) => [k.backupKey as string, k.storageKey]),
-    );
+    const byRefName = new Map(KEY_REGISTRY.map((k) => [k.refName, k.storageKey]));
     for (const [name, value] of Object.entries(K)) {
-      expect(byBackupKey.get(name), `K.${name} がレジストリと不一致`).toBe(value);
+      expect(byRefName.get(name), `K.${name} がレジストリと不一致`).toBe(value);
     }
   });
 
-  it("K は backupKey を持つ全キー（=バックアップ対象36件）を収録", () => {
-    const expected = KEY_REGISTRY.filter((k) => k.backupKey).length;
-    expect(Object.keys(K).length).toBe(expected);
-    expect(expected).toBe(36);
+  it("K は全キー（refName ベース・45エントリ）を収録", () => {
+    expect(Object.keys(K).length).toBe(KEY_REGISTRY.length);
+    expect(Object.keys(K).length).toBe(45);
   });
 
   it("K の全値が jarvis-trade-log: プレフィックスを持つ", () => {
@@ -184,6 +181,64 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
     expect(K.stockBtResults).toBe("jarvis-trade-log:stock-bt-results");
     expect(K.backtestV2).toBe("jarvis-trade-log:backtest-v2-results");
     expect(K.releaseChecklist).toBe("jarvis-trade-log:release-checklist");
+  });
+});
+
+describe("refName（A-1: 参照識別子）の固定化", () => {
+  it("全キーが空でない refName を持つ", () => {
+    for (const k of KEY_REGISTRY) {
+      expect(k.refName, `${k.storageKey} に refName が必要`).toBeTruthy();
+    }
+  });
+
+  it("refName に重複がない", () => {
+    const names = KEY_REGISTRY.map((k) => k.refName);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("backupKey を持つ全キーは refName === backupKey（既存 K プロパティ名と完全一致）", () => {
+    for (const k of KEY_REGISTRY.filter((x) => x.backupKey)) {
+      expect(k.refName, `${k.storageKey} の refName が backupKey と不一致`).toBe(k.backupKey);
+    }
+  });
+
+  it("除外キー（backupKey なし）の refName は storageKey サフィックスの camelCase", () => {
+    const EXPECTED_DERIVED: Record<string, string> = {
+      "jarvis-trade-log:advisor-ai-mode": "advisorAiMode",
+      "jarvis-trade-log:lastBackup": "lastBackup",
+      "jarvis-trade-log:backup-generations": "backupGenerations",
+      "jarvis-trade-log:watchlist-prev": "watchlistPrev",
+      "jarvis-trade-log:jquants-settings": "jquantsSettings",
+      "jarvis-trade-log:jquants-status": "jquantsStatus",
+      "jarvis-trade-log:jquants-token-cache": "jquantsTokenCache",
+      "jarvis-trade-log:price-cache:": "priceCache",
+      "jarvis-trade-log:price-update-log": "priceUpdateLog",
+    };
+    const excluded = KEY_REGISTRY.filter((k) => !k.backupKey);
+    // 除外キーの集合が期待どおり（過不足なし）
+    expect(excluded.map((k) => k.storageKey).sort()).toEqual(Object.keys(EXPECTED_DERIVED).sort());
+    for (const k of excluded) {
+      expect(k.refName, `${k.storageKey} の派生 refName`).toBe(EXPECTED_DERIVED[k.storageKey]);
+    }
+  });
+
+  it("K のプロパティ名集合は全 refName と一致", () => {
+    expect(Object.keys(K).sort()).toEqual(KEY_REGISTRY.map((k) => k.refName).sort());
+  });
+
+  it("既変換キー（Step1-2 + Batch1-5 = 21件）の参照が不変（回帰固定）", () => {
+    // 付け替え済みのプロパティ名が1文字も変わらないこと。
+    const CONVERTED = [
+      "tvEnabled", "performanceMode",
+      "simulations", "ruleImprovements", "reportSnapshots", "strategyRankingSnapshots",
+      "thresholdSettings", "adaptiveScoreSettings", "autoReportSettings", "aiCommentSettings",
+      "autoUpdateSettings", "cashPosition", "advisorWeights", "rankingSettings",
+      "favorites", "helpChecklist", "advisorSnapshots", "aiComments",
+      "stockBtResults", "backtestV2", "releaseChecklist",
+    ];
+    for (const name of CONVERTED) {
+      expect(K[name], `K.${name} が失われている`).toBeTruthy();
+    }
   });
 });
 
