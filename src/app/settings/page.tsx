@@ -34,12 +34,14 @@ import {
   setAiConfig,
   AI_MODES,
   COMMENT_STYLES,
+  COMMENT_DETAILS,
   TEMPERATURES,
   MAX_TOKENS,
   providerReady,
   type AiMode,
   type AiConfig,
   type CommentStyle,
+  type CommentDetail,
 } from "@/lib/advisor/advisor-ai-settings";
 import {
   getPerformanceMode,
@@ -972,11 +974,17 @@ export default function SettingsPage() {
             </div>
           )}
 
-          <div className="mt-3 grid sm:grid-cols-3 gap-3">
+          <div className="mt-3 grid sm:grid-cols-4 gap-3">
             <label className="block">
               <span className="hud-label">Comment Style</span>
               <select className="hud-input mt-1" value={aiCfg.style} onChange={(e) => patchAi({ style: e.target.value as CommentStyle })}>
                 {COMMENT_STYLES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="hud-label">Comment 詳細度</span>
+              <select className="hud-input mt-1" value={aiCfg.detail} onChange={(e) => patchAi({ detail: e.target.value as CommentDetail })}>
+                {COMMENT_DETAILS.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
               </select>
             </label>
             <label className="block">

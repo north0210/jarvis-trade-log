@@ -6,7 +6,7 @@
  * - 外部プロバイダ(OpenAI/Claude/Gemini/Local): APIキー/エンドポイント設定時のみ推論要求。失敗時は Template へフォールバック。
  * ニュース/RSS/外部情報は利用しない。断定・未来予測はしない。判断補助・投資助言ではない。
  */
-import { getAiConfig, effectiveAiMode, type AiConfig, type CommentStyle } from "./advisor-ai-settings";
+import { getAiConfig, effectiveAiMode, type AiConfig, type CommentStyle, type CommentDetail } from "./advisor-ai-settings";
 
 export type AiTarget = "advisor" | "risk" | "portfolio" | "watchlist" | "report" | "montecarlo" | "backtest" | "dashboard";
 
@@ -35,12 +35,23 @@ export const FIXED_COMMENTS = [
   "利益は市場が与えます。損失は我々が許可します。",
 ];
 
-/** ローカル生成（Template）。facts を要約し、スタイルに応じた所見＋固定コメントを付す。 */
-export function templateComment(ctx: AiContext, style: CommentStyle): string {
+/** ローカル生成（Template）。detail に応じ 短文/標準/詳細 を出し分ける。 */
+export function templateComment(ctx: AiContext, style: CommentStyle, detail: CommentDetail = "standard"): string {
   const lines: string[] = [];
+  if (detail === "short") {
+    // 短文：主要ファクト2件＋一言＋最小限の免責
+    lines.push(...ctx.facts.slice(0, 2));
+    lines.push(STYLE_OPENING[style]);
+    lines.push("※ 判断補助であり投資助言ではありません。");
+    return lines.join("\n");
+  }
   lines.push(`【${ctx.title}】`);
-  for (const f of ctx.facts.slice(0, 8)) lines.push(`・${f}`);
+  const factCount = detail === "detailed" ? 12 : 5;
+  for (const f of ctx.facts.slice(0, factCount)) lines.push(`・${f}`);
   lines.push(STYLE_OPENING[style]);
+  if (detail === "detailed") {
+    lines.push("上記は Advisor理由・欠損データ・BT状況・期待値・リスクを内部データのみから要約したものです。");
+  }
   for (const c of FIXED_COMMENTS) lines.push(c);
   lines.push("※ 本コメントは判断補助であり、投資助言ではありません。");
   return lines.join("\n");
@@ -130,12 +141,12 @@ export async function generateAiComment(ctx: AiContext): Promise<AiResult | null
   const eff = effectiveAiMode();
   if (eff === "off") return null;
   const cfg = getAiConfig();
-  if (eff === "template") return { text: templateComment(ctx, cfg.style), source: "template" };
+  if (eff === "template") return { text: templateComment(ctx, cfg.style, cfg.detail), source: "template" };
   // provider
   try {
     const text = await callProvider(cfg, ctx);
     return { text: `${text}`, source: "provider" };
   } catch {
-    return { text: templateComment(ctx, cfg.style), source: "fallback" };
+    return { text: templateComment(ctx, cfg.style, cfg.detail), source: "fallback" };
   }
 }

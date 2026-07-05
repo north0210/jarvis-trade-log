@@ -35,6 +35,7 @@ const DEFAULT_SETTINGS: WatchlistSettings = { enabled: false, intervalMinutes: 3
 
 export type DetectionKind =
   | "scoreSurge"
+  | "scoreDrop"
   | "rsiOverheat"
   | "rsiDip"
   | "volumeSurge"
@@ -177,6 +178,7 @@ export async function runWatchlistCheck(at: string): Promise<Detection[]> {
 
     if (p) {
       if (sc - p.score >= 10) push(s.code, s.name, "scoreSurge", `Score が ${p.score}→${sc} に急上昇しています。`, "info");
+      if (p.score - sc >= 10) push(s.code, s.name, "scoreDrop", `Score が ${p.score}→${sc} に急落しています。`, "warning");
       if (rsi != null && rsi >= th.rsiOverheat && (p.rsi == null || p.rsi < th.rsiOverheat)) push(s.code, s.name, "rsiOverheat", `RSI が ${rsi.toFixed(0)} と過熱域に入りました。`, "warning");
       if (rsi != null && rsi <= 40 && (p.rsi == null || p.rsi > 40)) push(s.code, s.name, "rsiDip", `RSI が ${rsi.toFixed(0)} と押し目域に入りました。`, "info");
       if (relVol != null && relVol >= th.relativeVolumeDanger && (p.relVol == null || p.relVol < th.relativeVolumeDanger)) push(s.code, s.name, "volumeSurge", `相対出来高が ${relVol.toFixed(1)}x に急増しています。`, "warning");

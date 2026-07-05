@@ -36,7 +36,10 @@ import { getAutoReportSettings, nextDueLabel, type ReportFrequency } from "@/lib
 import { summarizeVolumeAlerts, type VolumeAlertSummary } from "@/lib/alerts/volume-alerts";
 import { buildVolumeReport } from "@/lib/report/volume-report";
 import { buildAdvisorReport } from "@/lib/advisor/advisor-engine";
-import type { AdvisorCounts } from "@/lib/advisor/advisorTypes";
+import type { AdvisorCounts, AdvisorItem, AdvisorCategory } from "@/lib/advisor/advisorTypes";
+import { rankingComment } from "@/lib/advisor/ranking";
+import { CATEGORY_LABELS } from "@/lib/advisor/advisorTypes";
+import { listFavorites } from "@/lib/advisor/favorites";
 import ReleaseChecklist from "@/components/ReleaseChecklist";
 import Onboarding from "@/components/Onboarding";
 import AiComment from "@/components/AiComment";
@@ -155,6 +158,12 @@ export default function Dashboard() {
   const [volMax, setVolMax] = useState<{ name: string; code: string; rv: number } | null>(null);
   const [advisorCounts, setAdvisorCounts] = useState<AdvisorCounts | null>(null);
   const [advisorAt, setAdvisorAt] = useState<string | null>(null);
+  const [advItems, setAdvItems] = useState<AdvisorItem[]>([]);
+  const [missingStocks, setMissingStocks] = useState<{ code: string; name: string; missing: string[] }[]>([]);
+  const [topN, setTopN] = useState<3 | 5 | 10>(5);
+  const [favs, setFavs] = useState<string[]>([]);
+  const [updatedByCode, setUpdatedByCode] = useState<Record<string, string | null>>({});
+  const [assetTrend, setAssetTrend] = useState<{ weekPct: number | null; monthPct: number | null }>({ weekPct: null, monthPct: null });
   const [ext, setExt] = useState<{ aiCount: number; bt: StockBtResult | null; watchCount: number; advisorChange: number; btCount: number; btUncounted: number; btAvg: number | null; avgPf: number | null; avgDD: number | null; avgCagr: number | null; btBest: { name: string; grade: string } | null } | null>(null);
   const [thresholds, setThresholdsState] = useState<ThresholdSettings>(DEFAULT_THRESHOLDS);
   const [notifInfo, setNotifInfo] = useState<{
@@ -289,6 +298,18 @@ export default function Dashboard() {
     });
     setAdvisorCounts(advReport.hasData ? advReport.counts : null);
     setAdvisorAt(advReport.hasData ? new Date().toISOString() : null);
+    setAdvItems(advReport.items.slice().sort((a, b) => b.composite - a.composite));
+    setFavs(listFavorites());
+    setUpdatedByCode(Object.fromEntries(s.map((x) => [x.code, x.price_updated_at])));
+    setMissingStocks(
+      s
+        .map((st) => {
+          const miss = [st.per == null && "PER", st.pbr == null && "PBR", st.roe == null && "ROE", st.operating_margin == null && "営業利益率", st.sales_growth == null && "売上成長率", st.rsi == null && "RSI"].filter(Boolean) as string[];
+          return miss.length > 0 ? { code: st.code, name: st.name, missing: miss } : null;
+        })
+        .filter((x): x is { code: string; name: string; missing: string[] } => x !== null)
+        .slice(0, 8)
+    );
 
     // v1.3 拡張要約（localStorage 参照・軽量）
     const dets = listDetections();
@@ -313,6 +334,14 @@ export default function Dashboard() {
 
     const snaps = await snapshotRepo.list();
     setSnapshot(snaps.length ? { latest: snaps[0], rows: compareSnapshots(snaps[0], snaps[1] ?? null) } : null);
+    // 今週/今月の資産変化（スナップショット比較）
+    const curAssets = port.totalAssets;
+    const backPct = (days: number): number | null => {
+      const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+      const past = snaps.find((x) => x.date <= cutoff);
+      return past && past.totalAssets > 0 ? ((curAssets - past.totalAssets) / past.totalAssets) * 100 : null;
+    };
+    setAssetTrend({ weekPct: backPct(7), monthPct: backPct(30) });
     const ar = getAutoReportSettings();
     setAutoReport({ enabled: ar.enabled, frequency: ar.frequency, count: snaps.length, lastAuto: snaps.find((s) => s.source === "auto")?.date ?? null, nextDue: nextDueLabel() });
     const rankSnaps = await rankingRepo.list();
@@ -533,6 +562,74 @@ export default function Dashboard() {
 
       <ReleaseChecklist />
 
+      {(() => {
+        const dangerCats = new Set(["danger", "sellCandidate", "reduce"]);
+        const picks = advItems.filter((i) => !dangerCats.has(i.category)).slice(0, 3);
+        const dangerN = advItems.filter((i) => dangerCats.has(i.category)).length;
+        const topPick = picks[0] ?? null;
+        const pctCls = (n: number | null) => (n == null ? "text-arcdim" : n >= 0 ? "text-profit" : "text-danger");
+        const pctTxt = (n: number | null) => (n == null ? "—" : `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`);
+        return (
+          <section className="hud-panel p-4 border-arc/50 shadow-arc">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <h2 className="hud-label text-arc">🌅 今日の確認（朝30秒）</h2>
+              <div className="flex flex-wrap gap-1">
+                <Link href="/advisor-ranking" className="hud-btn text-xs px-3 py-1">ランキング</Link>
+                <Link href="/advisor" className="hud-btn text-xs px-3 py-1">Advisor</Link>
+                <Link href="/portfolio" className="hud-btn text-xs px-3 py-1">PF</Link>
+                <Link href="/holdings" className="hud-btn text-xs px-3 py-1">保有株</Link>
+                <Link href="/notifications" className="hud-btn text-xs px-3 py-1">通知</Link>
+                <Link href="/report" className="hud-btn text-xs px-3 py-1">レポート</Link>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+              {/* 1. Portfolio概要 */}
+              <div className="rounded border border-line/60 p-3">
+                <p className="hud-label">◈ ポートフォリオ</p>
+                <p className="font-mono text-lg mt-1 text-arc">¥{fmt(portfolio?.totalAssets ?? totals.value)}</p>
+                <p className={`font-mono text-sm ${totals.diff >= 0 ? "text-profit" : "text-danger"}`}>
+                  含み損益 {totals.diff >= 0 ? "+" : ""}¥{fmt(totals.diff)}（{totals.pct >= 0 ? "+" : ""}{totals.pct.toFixed(1)}%）
+                </p>
+                <p className="text-xs text-arcdim mt-1">現金 {portfolio ? (portfolio.cashRatio * 100).toFixed(0) : "—"}% / 保有 {portfolio?.holdingCount ?? 0}銘柄</p>
+                <p className="text-xs mt-1 font-mono">
+                  今週 <span className={pctCls(assetTrend.weekPct)}>{pctTxt(assetTrend.weekPct)}</span> / 今月 <span className={pctCls(assetTrend.monthPct)}>{pctTxt(assetTrend.monthPct)}</span>
+                </p>
+              </div>
+              {/* 2. Today's Picks Top3 */}
+              <div className="rounded border border-line/60 p-3">
+                <p className="hud-label">⭐ Today&apos;s Picks</p>
+                {picks.length === 0 ? (
+                  <p className="text-xs text-arcdim mt-1">候補なし（銘柄登録・価格更新を）</p>
+                ) : (
+                  <ul className="mt-1 space-y-0.5 text-xs font-mono">
+                    {picks.map((p, i) => (
+                      <li key={p.code}><span className="text-arc">{i + 1}. {p.code} {p.name}</span> <span className="text-arcdim">{p.composite}/{p.grade}</span></li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {/* 3. 危険・監視・通知 */}
+              <div className="rounded border border-line/60 p-3">
+                <p className="hud-label">⚠ 要確認</p>
+                <p className={`font-mono text-sm mt-1 ${dangerN > 0 ? "text-danger" : "text-arcdim"}`}>危険候補 {dangerN}件</p>
+                <p className={`font-mono text-sm ${ext && ext.watchCount > 0 ? "text-caution" : "text-arcdim"}`}>Watchlist検出 {ext?.watchCount ?? 0}件</p>
+                <p className={`font-mono text-sm ${notifInfo && notifInfo.dangerUnread > 0 ? "text-danger" : "text-arcdim"}`}>未読danger {notifInfo?.dangerUnread ?? 0}件</p>
+                <p className="text-xs text-arcdim mt-1">Advisor変化 {ext?.advisorChange ?? 0}件</p>
+              </div>
+              {/* 4. AI Summary 一言 */}
+              <div className="rounded border border-arc/30 p-3">
+                <p className="hud-label">🧠 JARVIS 一言</p>
+                <p className="text-xs font-mono text-[#cfeaff] mt-1 leading-relaxed">
+                  {topPick ? rankingComment(topPick, 0) : dangerN > 0 ? "危険候補があります。規律を優先してください。" : "際立った候補はありません。静観が妥当です、ボス。"}
+                </p>
+                <p className="text-[10px] text-arcdim mt-1">※ 判断補助・投資助言ではありません</p>
+              </div>
+            </div>
+            <p className="text-xs text-arcdim mt-2">夜は「レポート」で3分振り返り。詳細は下部の各パネルへ。</p>
+          </section>
+        );
+      })()}
+
       <section className="hud-panel p-3 flex flex-wrap items-center gap-2">
         <span className="hud-label">初めての方へ:</span>
         <Link href="/help" className="hud-btn text-xs px-3 py-1">📘 使い方を見る</Link>
@@ -717,6 +814,85 @@ export default function Dashboard() {
           <p className="text-xs text-arcdim mt-2">※ 判断補助であり投資助言ではありません。詳細と根拠は Advisor 画面で確認できます、ボス。</p>
         </section>
       )}
+
+      {advItems.length > 0 && (() => {
+        const dangerSet: AdvisorCategory[] = ["danger", "sellCandidate", "reduce"];
+        const picks = advItems.filter((i) => !dangerSet.includes(i.category)).slice(0, topN);
+        const dangers = advItems.filter((i) => dangerSet.includes(i.category)).sort((a, b) => a.composite - b.composite);
+        const catShort = (c: AdvisorItem["category"]) => CATEGORY_LABELS[c].split("（")[0];
+        return (
+          <section className="hud-panel p-4">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <h2 className="hud-label">⭐ Today&apos;s JARVIS Picks</h2>
+              <div className="flex gap-1">
+                {[3, 5, 10].map((n) => (
+                  <button key={n} className={`hud-btn text-xs px-3 py-1 ${topN === n ? "text-arc border-arc/60" : "text-arcdim"}`} onClick={() => setTopN(n as 3 | 5 | 10)}>Top{n}</button>
+                ))}
+                <Link href="/advisor-ranking" className="hud-btn text-xs px-3 py-1">ランキング →</Link>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {picks.map((it, i) => (
+                <div key={it.code} className="rounded border border-line/60 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-display tracking-wider text-arc">{i + 1}位 {it.code} {it.name}</span>
+                    <span className="font-mono text-sm">{it.composite}/{it.grade}</span>
+                  </div>
+                  <p className={`text-xs font-mono mt-1 ${it.category === "strongBuy" || it.category === "buy" ? "text-profit" : "text-arc"}`}>{catShort(it.category)}</p>
+                  <ul className="mt-1 text-xs font-mono text-[#cfeaff]">
+                    {it.reasons.slice(0, 3).map((r, j) => <li key={j}>・{r}</li>)}
+                  </ul>
+                  <p className="text-[11px] text-arcdim mt-1 font-mono">
+                    PF {it.bt?.pf != null ? it.bt.pf.toFixed(2) : "—"} / 期待値 {it.bt?.expectedValue != null ? `${it.bt.expectedValue.toFixed(1)}%` : "—"} / DD {it.bt?.maxDD != null ? `${it.bt.maxDD.toFixed(0)}%` : "—"} / 勝率 {it.bt?.winRate != null ? `${(it.bt.winRate * 100).toFixed(0)}%` : "—"}
+                    {updatedByCode[it.code] ? ` / 更新 ${updatedByCode[it.code]!.slice(0, 10)}` : " / 手入力"}
+                  </p>
+                  <p className="text-xs text-arcdim mt-1 font-mono">JARVIS: {rankingComment(it, 0)}</p>
+                  <div className="flex gap-2 mt-2">
+                    <Link href="/stocks" className="hud-btn text-xs px-2 py-0.5">評価</Link>
+                    <Link href="/advisor" className="hud-btn text-xs px-2 py-0.5">Advisor</Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {(() => {
+              const favItems = advItems.filter((i) => favs.includes(i.code));
+              return favItems.length > 0 ? (
+                <div className="mt-3 rounded border border-arc/30 p-3">
+                  <p className="hud-label text-arc mb-1">★ My Favorites（{favItems.length}）</p>
+                  <ul className="space-y-0.5 text-xs font-mono">
+                    {favItems.map((f) => (
+                      <li key={f.code}><span className="text-arc">{f.code} {f.name}</span><span className="text-arcdim"> — {f.composite}/{f.grade} / {CATEGORY_LABELS[f.category].split("（")[0]}</span></li>
+                    ))}
+                  </ul>
+                  <Link href="/advisor-ranking" className="hud-btn text-xs px-3 py-1 mt-2 inline-block">ランキングで管理 →</Link>
+                </div>
+              ) : null;
+            })()}
+            {dangers.length > 0 && (
+              <div className="mt-3 rounded border border-danger/40 p-3">
+                <p className="hud-label text-danger mb-1">⚠ 危険候補（{dangers.length}）</p>
+                <ul className="space-y-0.5 text-xs font-mono">
+                  {dangers.slice(0, 5).map((d) => (
+                    <li key={d.code}><span className="text-danger">{d.code} {d.name}</span><span className="text-arcdim"> — {catShort(d.category)} / {d.reasons.slice(0, 3).join(" / ")}</span></li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {missingStocks.length > 0 && (
+              <div className="mt-3 rounded border border-caution/40 p-3">
+                <p className="hud-label text-caution mb-1">◇ データ不足（Advisor精度低下）</p>
+                <ul className="space-y-0.5 text-xs font-mono">
+                  {missingStocks.map((m) => (
+                    <li key={m.code}><span className="text-arc">{m.code} {m.name}</span><span className="text-caution"> — 不足: {m.missing.join("/")}</span></li>
+                  ))}
+                </ul>
+                <Link href="/stocks" className="hud-btn text-xs px-3 py-1 mt-2 inline-block">銘柄管理で補完 →</Link>
+              </div>
+            )}
+            <p className="text-xs text-arcdim mt-2">※ 判断補助であり投資助言ではありません。</p>
+          </section>
+        );
+      })()}
 
       {advisorCounts && (
         <AiComment

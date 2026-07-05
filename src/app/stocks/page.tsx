@@ -8,12 +8,13 @@ import { stockVolumeAlerts } from "@/lib/alerts/volume-alerts";
 import { scoreStock, type ScoreResult } from "@/lib/score";
 import JarvisCommentPanel from "@/components/JarvisCommentPanel";
 import HelpTooltip from "@/components/HelpTooltip";
+import Link from "next/link";
+import TradingViewChartModal from "@/components/TradingViewChartModal";
 import { isTradingViewEnabled } from "@/lib/tradingview";
-import dynamic from "next/dynamic";
 import { getProviderMode } from "@/lib/pricing/settings";
-import { updateAllPrices } from "@/lib/pricing/priceUpdater";
+import { updateAllPrices, updateStockPrice } from "@/lib/pricing/priceUpdater";
+import { quickSetup, type QuickSetupResult } from "@/lib/advisor/quick-setup";
 
-const TradingViewChart = dynamic(() => import("@/components/TradingViewChart"), { ssr: false });
 const repo = getStockRepository();
 
 const gradeTone: Record<ScoreResult["grade"], string> = {
@@ -61,6 +62,11 @@ export default function StocksPage() {
   const [tvEnabled, setTvEnabled] = useState(false);
   const [priceMsg, setPriceMsg] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [quickCode, setQuickCode] = useState("");
+  const [quickName, setQuickName] = useState("");
+  const [quickBusy, setQuickBusy] = useState(false);
+  const [quickResult, setQuickResult] = useState<QuickSetupResult | null>(null);
 
   const load = async () => {
     setStocks(await repo.list());
@@ -148,7 +154,25 @@ export default function StocksPage() {
   const runScore = (s: Stock) =>
     setScored((prev) => (prev?.id === s.id ? null : { id: s.id, result: scoreStock(s) }));
 
-  const toggleChart = (id: string) => setChartId((prev) => (prev === id ? null : id));
+  const doQuickSetup = async () => {
+    setQuickBusy(true);
+    const r = await quickSetup(quickCode, quickName);
+    setQuickResult(r);
+    setQuickBusy(false);
+    if (r.ok) {
+      setQuickCode("");
+      setQuickName("");
+      await load();
+    }
+  };
+
+  const doUpdateOne = async (id: string) => {
+    setUpdatingId(id);
+    const r = await updateStockPrice(id);
+    setUpdatingId(null);
+    setPriceMsg(r.message);
+    await load();
+  };
 
   // 価格更新: 手入力モードは案内のみ。J-Quantsモードは共通サービスで一括更新。
   const updatePrices = async () => {
@@ -178,6 +202,56 @@ export default function StocksPage() {
 
   return (
     <div className="space-y-6">
+      <section className="hud-panel p-4 border-arc/40 shadow-arc">
+        <h2 className="hud-label mb-2">⚡ クイックセットアップ（コード入力→自動評価）</h2>
+        <p className="text-xs text-arcdim mb-3">
+          銘柄コードを入力すると、登録 → 価格/RSI/MACD/出来高 自動取得 → Advisor評価 → AIコメント → 保存 を一括実行します。
+          PER/PBR/ROE/営業利益率/売上成長率 は自動取得できないため手入力（欠損は明示）。判断補助であり投資助言ではありません。
+        </p>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="block">
+            <span className="hud-label">銘柄コード *</span>
+            <input className="hud-input mt-1 w-28" value={quickCode} onChange={(e) => setQuickCode(e.target.value)} placeholder="7203" />
+          </label>
+          <label className="block">
+            <span className="hud-label">銘柄名（任意）</span>
+            <input className="hud-input mt-1 w-48" value={quickName} onChange={(e) => setQuickName(e.target.value)} placeholder="トヨタ自動車" />
+          </label>
+          <button className="hud-btn" onClick={doQuickSetup} disabled={quickBusy || !quickCode.trim()}>{quickBusy ? "処理中…" : "自動セットアップ"}</button>
+        </div>
+        {quickResult && (
+          <div className="mt-3 rounded border border-line/60 p-3">
+            <div className="flex flex-wrap items-center gap-4">
+              <span className="font-display text-arc">{quickResult.name}（{quickResult.code}）</span>
+              <span className="font-mono">Score <span className="text-arc text-lg">{quickResult.score}</span> / Grade {quickResult.grade}</span>
+              {quickResult.advisor && <span className="font-mono">Advisor <span className="text-arc">{quickResult.advisor.grade}</span>（{quickResult.advisor.category}）</span>}
+            </div>
+            <p className="text-xs font-mono mt-2"><span className="text-arcdim">自動取得: </span><span className="text-profit">{quickResult.autoFilled.join(" / ") || "なし"}</span></p>
+            {quickResult.missing.length > 0 && (
+              <p className="text-xs font-mono mt-1"><span className="text-arcdim">要手入力（データなし）: </span><span className="text-caution">{quickResult.missing.join(" / ")}</span></p>
+            )}
+            {quickResult.advisor && (
+              <ul className="mt-2 grid sm:grid-cols-2 gap-x-4 text-xs font-mono text-[#cfeaff]">
+                {quickResult.advisor.reasons.map((r, i) => <li key={i}>・{r}</li>)}
+              </ul>
+            )}
+            {quickResult.aiComment && (
+              <div className="mt-2 rounded border border-arc/30 p-2">
+                <p className="text-arcdim text-xs">AIコメント（ローカル・判断補助）</p>
+                <p className="text-xs font-mono text-[#cfeaff] whitespace-pre-wrap">{quickResult.aiComment}</p>
+              </div>
+            )}
+            <p className="text-xs text-arcdim mt-2">{quickResult.priceMsg}</p>
+            <div className="mt-2 flex gap-2">
+              {quickResult.missing.length > 0 && (
+                <button className="hud-btn text-xs px-3 py-1" onClick={() => { const t = stocks.find((x) => x.code === quickResult.code); if (t) edit(t); }}>ファンダを手入力 →</button>
+              )}
+              <Link href="/advisor" className="hud-btn text-xs px-3 py-1">Advisorで確認 →</Link>
+            </div>
+          </div>
+        )}
+      </section>
+
       <section className="hud-panel p-4">
         <h2 className="hud-label mb-4">
           {editingId ? "▲ 銘柄を編集" : "＋ 銘柄を登録"}
@@ -230,10 +304,14 @@ export default function StocksPage() {
       <section className="hud-panel p-4 overflow-x-auto">
         <div className="flex items-center justify-between mb-3">
           <h2 className="hud-label">銘柄一覧 ({stocks.length})</h2>
-          <button className="hud-btn text-xs px-3 py-1" onClick={updatePrices} disabled={updating}>
-            {updating ? "更新中…" : "価格更新"}
-          </button>
+          <div className="flex gap-2">
+            <Link href="/advisor" className="hud-btn text-xs px-3 py-1">Advisorで再評価 →</Link>
+            <button className="hud-btn text-xs px-3 py-1" onClick={updatePrices} disabled={updating}>
+              {updating ? "更新中…" : "価格更新（一括）"}
+            </button>
+          </div>
         </div>
+        <p className="text-xs text-arcdim mb-3">価格更新で 現在値/RSI/MACD/相対出来高 を自動取得（J-Quantsモード）。PER/PBR/ROE/営業利益率/売上成長率 は手入力です（未取得は「データ不足」表示）。</p>
         {priceMsg && (
           <p className="text-arc text-sm font-mono border border-arc/40 bg-arc/5 rounded px-3 py-2 mb-3">
             {priceMsg}
@@ -272,7 +350,16 @@ export default function StocksPage() {
                 <Fragment key={s.id}>
                   <tr className={`border-t border-line/60 ${rowColor}`}>
                     <td className="py-2 pr-3">{s.code}</td>
-                    <td className="py-2 pr-3">{s.name}</td>
+                    <td className="py-2 pr-3">
+                      {s.name}
+                      {(() => {
+                        const miss = [s.per == null && "PER", s.pbr == null && "PBR", s.roe == null && "ROE", s.rsi == null && "RSI"].filter(Boolean);
+                        return miss.length > 0 ? <span className="ml-1 text-[10px] text-caution border border-caution/50 rounded px-1">データ不足</span> : null;
+                      })()}
+                      <span className="block text-[10px] text-arcdim">
+                        {s.price_updated_at ? `自動取得 ${s.price_updated_at.slice(0, 10)}` : "未取得（手入力）"}
+                      </span>
+                    </td>
                     <td className="py-2 pr-3">{s.status}</td>
                     <td className="py-2 pr-3 text-arc">{s.rank}</td>
                     <td className="py-2 pr-3">{s.current_price ?? "—"}</td>
@@ -285,10 +372,11 @@ export default function StocksPage() {
                     <td className="py-2 pr-3">{s.macd}</td>
                     <td className="py-2 pr-3">{s.per ?? "—"}</td>
                     <td className="py-2 pr-3">{s.roe ?? "—"}</td>
-                    <td className="py-2 flex gap-2">
+                    <td className="py-2 flex flex-wrap gap-2">
                       <button className="hud-btn text-xs px-2 py-0.5" onClick={() => runScore(s)}>評価</button>
+                      <button className="hud-btn text-xs px-2 py-0.5" onClick={() => doUpdateOne(s.id)} disabled={updatingId === s.id}>{updatingId === s.id ? "更新中" : "更新"}</button>
                       {tvEnabled && (
-                        <button className="hud-btn text-xs px-2 py-0.5" onClick={() => toggleChart(s.id)}>チャート</button>
+                        <button className="hud-btn text-xs px-2 py-0.5" onClick={() => setChartId(s.id)}>チャート</button>
                       )}
                       <button className="hud-btn text-xs px-2 py-0.5" onClick={() => edit(s)}>編集</button>
                       <button className="hud-btn-danger" onClick={() => remove(s.id)}>削除</button>
@@ -323,19 +411,17 @@ export default function StocksPage() {
                       </td>
                     </tr>
                   )}
-                  {tvEnabled && chartId === s.id && (
-                    <tr className="border-t border-line/40 bg-void/40">
-                      <td colSpan={13} className="py-3 px-3">
-                        <TradingViewChart code={s.code} height={420} />
-                      </td>
-                    </tr>
-                  )}
                 </Fragment>
               );
             })}
           </tbody>
         </table>
       </section>
+
+      {tvEnabled && chartId && (() => {
+        const cs = stocks.find((x) => x.id === chartId);
+        return cs ? <TradingViewChartModal code={cs.code} name={cs.name} onClose={() => setChartId(null)} /> : null;
+      })()}
     </div>
   );
 }

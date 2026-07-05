@@ -21,7 +21,11 @@ export interface StockSignals {
   adaptiveScore: number | null;
   rsi: number | null;
   per: number | null;
+  pbr: number | null;
   roe: number | null;
+  operatingMargin: number | null;
+  revenueGrowth: number | null;
+  macd: string | null;
   relativeVolume: number | null;
   volumeTrend: string;
   held: boolean;
@@ -182,12 +186,37 @@ export function decide(s: StockSignals, g: GlobalSignals, t: Thresholds, w: Advi
       if (btGrade) r.push(`BT ${btGrade}`);
     } else if (g.btAvgCagr != null && g.btAvgCagr > 0) r.push("PF良好");
   };
-  const addPer = () => { if (s.per != null) r.push(s.per <= 40 ? "PER適正" : "PER高め"); };
-  const addRoe = () => { if (s.roe != null && s.roe >= 10) r.push("ROE良好"); };
   const addVol = () => { if (volumeUp(s, t)) r.push("出来高増加"); else if (volumeDown(s)) r.push("出来高低下"); };
   const addDisc = () => r.push(g.disciplineDanger > 0 ? `規律違反 ${g.disciplineDanger}件` : "規律違反なし");
   const addPos = () => { if (s.positionRatioPct != null) r.push(s.positionRatioPct >= t.oneStockWeightWarning ? `保有率 ${s.positionRatioPct.toFixed(0)}%（過大）` : "保有率正常"); };
-  const done = (category: AdvisorCategory, action: string): Decision => ({ category, composite, grade, reasons: r, action, btScore, btGrade });
+  // 指標を常時・定性ラベル付きで可視化（欠損は「データなし」）— 参照フィールド統一
+  const perQ = s.per == null ? null : s.per <= 15 ? "市場平均以下" : s.per <= 25 ? "適正圏" : s.per <= 40 ? "やや高め" : "高PER";
+  const pbrQ = s.pbr == null ? null : s.pbr <= 1 ? "解散価値以下" : s.pbr <= 3 ? "標準" : "高PBR";
+  const roeQ = s.roe == null ? null : s.roe >= 20 ? "優秀" : s.roe >= 10 ? "平均水準" : "低水準";
+  const rsiQ = s.rsi == null ? null : s.rsi < 30 ? "売られ過ぎ" : s.rsi <= 60 ? "中立" : s.rsi <= 70 ? "やや過熱" : s.rsi >= 80 ? "過熱" : "高値警戒";
+  const omQ = s.operatingMargin == null ? null : s.operatingMargin >= 20 ? "高収益" : s.operatingMargin >= 10 ? "良好" : "低め";
+  const rgQ = s.revenueGrowth == null ? null : s.revenueGrowth >= 20 ? "高成長" : s.revenueGrowth >= 5 ? "成長" : "鈍化";
+  const fundamentals: string[] = [
+    s.per != null ? `PER ${s.per}（${perQ}）` : "PER データなし",
+    s.pbr != null ? `PBR ${s.pbr}（${pbrQ}）` : "PBR データなし",
+    s.roe != null ? `ROE ${s.roe}%（${roeQ}）` : "ROE データなし",
+    s.operatingMargin != null ? `営業利益率 ${s.operatingMargin}%（${omQ}）` : "営業利益率 データなし",
+    s.revenueGrowth != null ? `売上成長率 ${s.revenueGrowth}%（${rgQ}）` : "売上成長率 データなし",
+    s.rsi != null ? `RSI ${s.rsi.toFixed(0)}（${rsiQ}）` : "RSI データなし",
+    s.macd && s.macd !== "不明" ? `MACD ${s.macd}` : "MACD データなし",
+  ];
+  const missing: string[] = [];
+  if (s.per == null) missing.push("PER");
+  if (s.pbr == null) missing.push("PBR");
+  if (s.roe == null) missing.push("ROE");
+  if (s.operatingMargin == null) missing.push("営業利益率");
+  if (s.revenueGrowth == null) missing.push("売上成長率");
+  if (s.rsi == null) missing.push("RSI");
+  const done = (category: AdvisorCategory, action: string): Decision => {
+    const reasons = [...fundamentals, ...r];
+    if (missing.length) reasons.push(`データ不足: ${missing.join("/")} 未取得（要 価格更新/手入力）`);
+    return { category, composite, grade, reasons, action, btScore, btGrade };
+  };
 
   // ---- 保有銘柄 ----
   if (s.held) {
@@ -214,23 +243,26 @@ export function decide(s: StockSignals, g: GlobalSignals, t: Thresholds, w: Advi
   }
 
   // ---- 未保有銘柄 ----
-  if (composite < 48 || s.baseGrade === "D") {
+  // composite が低い場合のみ見送り（baseGrade D でも評価は行い、買い候補ゲートで抑制）
+  if (composite < 48) {
     r.push(`総合 ${grade}`); if (s.score < 50) r.push(`Score ${s.score}`); if (volumeDown(s)) r.push("出来高低下");
     return done("avoid", "現時点は見送り。条件が整うまで待機してください。");
   }
+  const notWeak = s.baseGrade !== "D"; // ファンダ最弱は買い候補にせず監視まで
   const entryTiming = rsiDipZone(s) && !volumeDown(s) && s.strategyFit !== false;
-  if (composite >= 85 && entryTiming && (g.riskGrade === "S" || g.riskGrade === "A") && s.strategyFit === true && g.disciplineDanger === 0) {
-    addRsi(); addRisk(); addMc(); addBt(); addPer(); addRoe(); addVol(); r.push("Strategy適合"); addDisc();
+  if (notWeak && composite >= 85 && entryTiming && (g.riskGrade === "S" || g.riskGrade === "A") && s.strategyFit === true && g.disciplineDanger === 0) {
+    addRisk(); addMc(); addBt(); addVol(); r.push("Strategy適合"); addDisc();
     return done("strongBuy", "資産の5〜10%以内で段階エントリーを検討してください。");
   }
-  if (composite >= 70 && entryTiming) {
-    addRsi(); addRisk(); addMc(); addBt(); addVol(); if (s.strategyFit === true) r.push("Strategy適合");
+  if (notWeak && composite >= 70 && entryTiming) {
+    addRisk(); addMc(); addBt(); addVol(); if (s.strategyFit === true) r.push("Strategy適合");
     return done("buy", "資産の5〜10%以内で段階エントリーを検討してください。");
   }
   if (composite >= 60 || (composite >= 48 && (rsiOverheated(s, t) || volumeUp(s, t)))) {
-    addRsi(); if (rsiOverheated(s, t)) r.push("短期過熱の可能性"); addVol(); addRisk();
+    if (rsiOverheated(s, t)) r.push("短期過熱の可能性"); addVol(); addRisk();
+    if (!notWeak) r.push("ファンダ最弱（要確認）");
     return done("watch", "監視継続。押し目・条件成立を待って再評価してください。");
   }
-  addRsi(); r.push("条件が十分に揃っていません");
+  r.push("条件が十分に揃っていません");
   return done("avoid", "現時点は見送り。条件が整うまで待機してください。");
 }

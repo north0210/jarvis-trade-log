@@ -168,6 +168,10 @@ npm run dev
 | `src/lib/pricing/provider.ts` | 価格取得層（J-Quants接続はここ経由） |
 | `src/app/api/jquants` | J-Quants Route Handler（env優先・任意） |
 | `src/app/api/ai-comment` | LLMコメント Route Handler（env優先・任意・ローカルfallback） |
+| `src/lib/storage/keys.ts` | **全 localStorage キーの中央レジストリ**（バックアップ対象はここから導出） |
+| `src/lib/supabase.ts` / `supabase/` | **レガシー・現在未使用**（下記参照） |
+
+> **レガシーについて**：本アプリは**完全ローカル（localStorage）構成**です。`src/lib/supabase.ts`（Supabaseクライアント）と `supabase/migrations/0001_init.sql`、依存 `@supabase/supabase-js` は**初期構成の名残で現在どこからも使用されていません**。将来のDB同期復活時の足場として**削除せず温存**しています。
 
 ## スクリプト
 
@@ -175,13 +179,15 @@ npm run dev
 npm run dev     # 開発サーバ
 npm run build   # 本番ビルド（環境変数なしで成功）
 npm run lint    # ESLint（エラーゼロ）
+npm run test    # ユニットテスト（Vitest）
 npm run start   # 本番起動
 ```
 
-## アラート仕様（参考）
+## アラート仕様（参考・実装を正とする）
 
 - 現在価格が損切りライン以下 → 損切り到達（赤）
-- 現在価格が損切りラインの +3% 以内 → 損切り接近（赤）
+- **損切りライン接近**（赤）：**現在価格を基準に** `(現在価格 − 損切りライン) / 現在価格 ≤ 3%` で発火
+  （※「損切りライン基準」ではない。将来この基準へ変更する場合、同じ乖離でも発火数が変わる点に注意）
 - RSI ≥ 80 → 過熱警告（橙）
 - 損益率 ≤ -5% → 危険（赤） / 損益率 ≥ +20% → 利確検討（緑）
 

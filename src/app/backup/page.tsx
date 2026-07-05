@@ -50,9 +50,11 @@ export default function BackupPage() {
   }, []);
 
   const doExport = () => {
-    downloadBackup(new Date());
+    const backup = downloadBackup(new Date());
     refreshMeta();
-    setMsg({ tone: "ok", text: "全データを書き出しました。バックアップファイルを保管してください、ボス。" });
+    const bytes = new Blob([JSON.stringify(backup)]).size;
+    const size = bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)}MB` : `${Math.max(1, Math.round(bytes / 1024))}KB`;
+    setMsg({ tone: "ok", text: `全データを書き出しました（概算サイズ ${size}）。バックアップファイルを保管してください、ボス。` });
   };
 
   const doStash = () => {

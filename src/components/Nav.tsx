@@ -53,6 +53,7 @@ const GROUPS: NavGroup[] = [
     label: "戦略",
     items: [
       { href: "/advisor", label: "JARVIS Advisor" },
+      { href: "/advisor-ranking", label: "ランキング" },
       { href: "/stock-backtest", label: "銘柄別BT" },
       { href: "/strategy", label: "戦略テンプレート" },
       { href: "/rule-improver", label: "ルール改善" },

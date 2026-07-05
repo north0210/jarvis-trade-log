@@ -1,5 +1,8 @@
 # JARVIS Trade Log v1.0.0 — Release Notes
 
+> 🗄 **歴史的アーカイブ**：本ファイルは v1.0.0 時点のリリースノートです（当時の記録として温存）。
+> **最新のリリースノートは [`docs/RELEASE_NOTES.md`](./RELEASE_NOTES.md)（現行 v1.7.0）** を参照してください。
+
 ## 1. v1.0 の目的
 
 個人の株式運用を、**完全ローカル**（ブラウザ localStorage のみ）で一元管理・分析できる

@@ -13,6 +13,7 @@
 import { getStockRepository } from "@/lib/storage/stockRepository";
 import { calculateRSI } from "@/lib/indicators/rsi";
 import { computeVolumeMetrics } from "@/lib/indicators/volume";
+import { computeMacdState } from "@/lib/indicators/macd";
 import { getProviderMode, getJQuantsCredentials, setJQuantsStatus } from "./settings";
 import { fetchJQuantsQuotes } from "./jquantsClient";
 
@@ -104,11 +105,14 @@ export async function updateAllPrices(): Promise<BulkUpdateResult> {
       const rsi = calculateRSI(q.closes ?? []);
       if (rsi != null) rsiCount++;
       const vm = computeVolumeMetrics(q.volumes ?? []);
+      const macd = computeMacdState(q.closes ?? []);
       const { id, ...rest } = s;
       await repo.update(id, {
         ...rest,
         current_price: q.current_price,
         rsi: rsi ?? rest.rsi,
+        // MACD（系列から判定できた場合のみ更新）
+        macd: macd !== "不明" ? macd : rest.macd,
         // 出来高指標（取得できた場合のみ更新）
         volume: vm.volume ?? rest.volume,
         relativeVolume: vm.relativeVolume ?? rest.relativeVolume,
@@ -122,4 +126,37 @@ export async function updateAllPrices(): Promise<BulkUpdateResult> {
   const message = failedCount === 0 ? "価格更新が完了しました" : "一部銘柄の更新に失敗しました";
   appendLog({ date: at, successCount: success, failedCount, message });
   return { ok: true, successCount: success, failedCount, rsiCount, message, at };
+}
+
+/** 個別銘柄の価格・RSI・MACD・出来高を J-Quants から更新する。 */
+export async function updateStockPrice(id: string): Promise<{ ok: boolean; message: string }> {
+  const repo = getStockRepository();
+  const stocks = await repo.list();
+  const s = stocks.find((x) => x.id === id);
+  if (!s) return { ok: false, message: "銘柄が見つかりません。" };
+  if (getProviderMode() !== "jquants-ready") return { ok: false, message: "手入力モードです（設定でJ-Quantsへ切替）。" };
+
+  const at = new Date().toISOString();
+  const res = await fetchJQuantsQuotes([s.code], getJQuantsCredentials());
+  setJQuantsStatus({ status: res.status, at, message: res.message ?? (res.ok ? "接続成功" : "接続失敗") });
+  if (!res.ok || !res.quotes) return { ok: false, message: res.message ?? "取得に失敗しました。" };
+  const q = res.quotes.find((x) => x.code === s.code);
+  if (!q || q.current_price == null) return { ok: false, message: "価格データを取得できませんでした。" };
+
+  const rsi = calculateRSI(q.closes ?? []);
+  const vm = computeVolumeMetrics(q.volumes ?? []);
+  const macd = computeMacdState(q.closes ?? []);
+  const { id: _id, ...rest } = s;
+  void _id;
+  await repo.update(id, {
+    ...rest,
+    current_price: q.current_price,
+    rsi: rsi ?? rest.rsi,
+    macd: macd !== "不明" ? macd : rest.macd,
+    volume: vm.volume ?? rest.volume,
+    relativeVolume: vm.relativeVolume ?? rest.relativeVolume,
+    volumeTrend: vm.volume != null ? vm.volumeTrend : rest.volumeTrend,
+    price_updated_at: q.date ?? at,
+  });
+  return { ok: true, message: `${s.name} を更新しました（価格/RSI/MACD/出来高）。ファンダ(PER/PBR/ROE等)は手入力です。` };
 }

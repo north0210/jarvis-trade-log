@@ -17,6 +17,19 @@
 - **固定コメント**: 「推奨は判断補助です／利益は保証できません／優位性は未来を保証しません／感情ではなく規律で／利益は市場が与えます・損失は我々が許可します」。断定・未来予測なし・投資助言ではない。
 - **履歴保存**: 生成コメントをローカル保存可能。ニュース/RSS/LINE/SNS/外部情報は不使用。
 
+## [1.7.0] - Stable（実運用凍結版）
+
+v1.7.x を実運用版として凍結。1週間の実運用フィードバックを経て v1.8 を開始する。
+
+- **クイックセットアップ**: 銘柄コード入力→登録/価格/RSI/MACD/出来高/Advisor/AIコメント/保存を一括
+- **Advisor ランキング（/advisor-ranking）**: Score/Grade/PF/CAGR/DD/勝率/期待値/RSI/PER/ROE/更新日時ソート、各種フィルタ、Score内訳、危険/データ不足枠、状態永続
+- **Dashboard Today's Picks**（Top3/5/10・PF/期待値/DD/勝率/更新）＋ **My Favorites** ＋ 危険候補 ＋ データ不足
+- **お気に入り**（最大20・localStorage）
+- **AIコメント3種**（短文/標準/詳細）・完全ローカル・OFF既定・Template fallback
+- **TradingViewChartModal**（700px・ESC/×/背景・モバイル）
+- **バックアップ拡充**（favorites/advisorSnapshots/aiComments/stockBtResults/watchlistEvents 等）
+- **Watchlist**: Score急落検出追加
+
 ## [1.5.0] - 全銘柄BT ＋ AIコメント生成（正式版）
 
 - **全銘柄自動BT**: Advisor対象銘柄を一括バックテスト（PF/勝率/最大DD/CAGR/MC破綻率/期待値/平均保有日数/取引回数）。データ不足銘柄は市場平均へフォールバック。

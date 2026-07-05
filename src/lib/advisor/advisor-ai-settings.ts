@@ -9,6 +9,13 @@ const CONFIG_KEY = "jarvis-trade-log:ai-config";
 
 export type AiMode = "off" | "template" | "openai" | "claude" | "gemini" | "local";
 export type CommentStyle = "conservative" | "balanced" | "aggressive";
+export type CommentDetail = "short" | "standard" | "detailed";
+
+export const COMMENT_DETAILS: { key: CommentDetail; label: string }[] = [
+  { key: "short", label: "短文" },
+  { key: "standard", label: "標準" },
+  { key: "detailed", label: "詳細" },
+];
 
 export const AI_MODES: { key: AiMode; label: string; note: string }[] = [
   { key: "off", label: "OFF", note: "AIコメントを表示しません（既定）。" },
@@ -33,6 +40,7 @@ export interface AiConfig {
   apiKey: string; // ユーザー管理・localStorageのみ・外部送信は選択プロバイダへの推論要求のみ
   endpoint: string; // Local LLM 用（OpenAI互換）
   style: CommentStyle;
+  detail: CommentDetail;
   temperature: number;
   maxTokens: number;
 }
@@ -42,6 +50,7 @@ const DEFAULT_CONFIG: AiConfig = {
   apiKey: "",
   endpoint: "",
   style: "balanced",
+  detail: "standard",
   temperature: 0.3,
   maxTokens: 300,
 };
@@ -59,6 +68,7 @@ export function getAiConfig(): AiConfig {
       apiKey: typeof base.apiKey === "string" ? base.apiKey : "",
       endpoint: typeof base.endpoint === "string" ? base.endpoint : "",
       style: base.style === "conservative" || base.style === "aggressive" ? base.style : "balanced",
+      detail: base.detail === "short" || base.detail === "detailed" ? base.detail : "standard",
       temperature: typeof base.temperature === "number" ? base.temperature : 0.3,
       maxTokens: typeof base.maxTokens === "number" ? base.maxTokens : 300,
     };

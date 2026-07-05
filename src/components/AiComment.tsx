@@ -16,13 +16,15 @@ export default function AiComment({ ctx }: { ctx: AiContext }) {
   const [source, setSource] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const style = useMemo(() => (typeof window !== "undefined" ? getAiConfig().style : "balanced"), []);
+  const cfg = useMemo(() => (typeof window !== "undefined" ? getAiConfig() : null), []);
+  const style = cfg?.style ?? "balanced";
+  const detail = cfg?.detail ?? "standard";
 
   useEffect(() => {
     const eff = effectiveAiMode();
     setMode(eff);
     if (eff === "template") {
-      setText(templateComment(ctx, style));
+      setText(templateComment(ctx, style, detail));
       setSource("template");
     } else {
       setText(null);

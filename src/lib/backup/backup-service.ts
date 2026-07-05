@@ -8,22 +8,16 @@
  * 認証情報・価格キャッシュ等の機微/一時データはバックアップ対象外（安全側）。
  */
 
+import { BACKUP_KEY_DEFS, type BackupItemKind, type RestoreUnit } from "@/lib/storage/keys";
+
 const APP = "jarvis-trade-log";
 export const FULL_VERSION = 2;
 const GENERATIONS_KEY = "jarvis-trade-log:backup-generations";
 const LAST_BACKUP_KEY = "jarvis-trade-log:lastBackup";
 const MAX_GENERATIONS = 3;
 
-export type BackupItemKind = "array" | "value";
-export type RestoreUnit =
-  | "stocks"
-  | "holdings"
-  | "journal"
-  | "trades"
-  | "strategies"
-  | "reports"
-  | "notifications"
-  | "settings";
+// 型は keys.ts に集約。既存の import 互換のため re-export する。
+export type { BackupItemKind, RestoreUnit } from "@/lib/storage/keys";
 
 export interface BackupItemDef {
   key: string; // エンベロープ内キー
@@ -44,29 +38,17 @@ export const UNIT_LABELS: Record<RestoreUnit, string> = {
   settings: "設定",
 };
 
-export const BACKUP_ITEMS: BackupItemDef[] = [
-  { key: "stocks", label: "銘柄", storageKey: "jarvis-trade-log:stocks", kind: "array", unit: "stocks" },
-  { key: "holdings", label: "保有株", storageKey: "jarvis-trade-log:holdings", kind: "array", unit: "holdings" },
-  { key: "journal", label: "運用日誌", storageKey: "jarvis-trade-log:journal", kind: "array", unit: "journal" },
-  { key: "trades", label: "取引履歴", storageKey: "jarvis-trade-log:trades", kind: "array", unit: "trades" },
-  { key: "simulations", label: "試算結果", storageKey: "jarvis-trade-log:simulations", kind: "array", unit: "trades" },
-  { key: "strategies", label: "戦略テンプレート", storageKey: "jarvis-trade-log:strategies", kind: "array", unit: "strategies" },
-  { key: "ruleImprovements", label: "ルール改善", storageKey: "jarvis-trade-log:rule-improvements", kind: "array", unit: "strategies" },
-  { key: "reportSnapshots", label: "レポートスナップショット", storageKey: "jarvis-trade-log:report-snapshots", kind: "array", unit: "reports" },
-  { key: "strategyRankingSnapshots", label: "戦略ランキング履歴", storageKey: "jarvis-trade-log:strategy-ranking-snapshots", kind: "array", unit: "reports" },
-  { key: "notifications", label: "通知履歴", storageKey: "jarvis-trade-log:notification-history", kind: "value", unit: "notifications" },
-  { key: "notificationSettings", label: "通知設定", storageKey: "jarvis-trade-log:notification-settings", kind: "value", unit: "notifications" },
-  { key: "notificationRetention", label: "通知保持期間", storageKey: "jarvis-trade-log:notification-retention", kind: "value", unit: "notifications" },
-  { key: "settings", label: "基本設定", storageKey: "jarvis-trade-log:settings", kind: "value", unit: "settings" },
-  { key: "thresholdSettings", label: "通知しきい値", storageKey: "jarvis-trade-log:threshold-settings", kind: "value", unit: "settings" },
-  { key: "adaptiveScoreSettings", label: "適応スコア設定", storageKey: "jarvis-trade-log:adaptive-score-settings", kind: "value", unit: "settings" },
-  { key: "autoReportSettings", label: "レポート自動保存設定", storageKey: "jarvis-trade-log:auto-report-settings", kind: "value", unit: "settings" },
-  { key: "aiCommentSettings", label: "AIコメント設定", storageKey: "jarvis-trade-log:ai-comment-settings", kind: "value", unit: "settings" },
-  { key: "autoUpdateSettings", label: "自動更新設定", storageKey: "jarvis-trade-log:auto-update-settings", kind: "value", unit: "settings" },
-  { key: "cashPosition", label: "現金ポジション", storageKey: "jarvis-trade-log:cash-position", kind: "value", unit: "settings" },
-  { key: "primaryStrategy", label: "主戦略", storageKey: "jarvis-trade-log:primary-strategy", kind: "value", unit: "settings" },
-  { key: "tvEnabled", label: "TradingView表示", storageKey: "jarvis-trade-log:tv-enabled", kind: "value", unit: "settings" },
-];
+/**
+ * バックアップ対象。keys.ts の中央レジストリ（BACKUP_KEY_DEFS = includeInBackup:true）から導出。
+ * 手動の二重登録は廃止。対象キーの追加/除外は keys.ts の KEY_REGISTRY を編集する。
+ */
+export const BACKUP_ITEMS: BackupItemDef[] = BACKUP_KEY_DEFS.map((d) => ({
+  key: d.backupKey as string,
+  label: d.label,
+  storageKey: d.storageKey,
+  kind: d.kind,
+  unit: d.unit,
+}));
 
 const ITEM_BY_KEY: Record<string, BackupItemDef> = BACKUP_ITEMS.reduce(
   (acc, it) => {

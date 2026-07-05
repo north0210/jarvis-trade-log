@@ -96,9 +96,12 @@ export default function AdvisorView({ report }: { report: AdvisorReport }) {
                       {it.btGrade && <span className="text-arcdim"> / <HelpTooltip termKey="btgrade" label={`BT ${it.btGrade}`} /></span>}
                     </span>
                   </div>
-                  <p className="text-xs font-mono text-[#cfeaff] mt-2">
-                    <span className="text-arcdim">理由: </span>{it.reasons.join(" / ") || "—"}
-                  </p>
+                  <div className="mt-2">
+                    <p className="text-arcdim text-xs">理由</p>
+                    <ul className="grid sm:grid-cols-2 gap-x-4 text-xs font-mono text-[#cfeaff]">
+                      {(it.reasons.length ? it.reasons : ["—"]).map((rz, i) => <li key={i}>・{rz}</li>)}
+                    </ul>
+                  </div>
                   {it.bt && (
                     <p className="text-xs font-mono text-arcdim mt-1">
                       BT: PF {it.bt.pf != null ? it.bt.pf.toFixed(2) : "—"} / 勝率 {it.bt.winRate != null ? `${(it.bt.winRate * 100).toFixed(0)}%` : "—"} / DD {it.bt.maxDD != null ? `${it.bt.maxDD.toFixed(0)}%` : "—"} / CAGR {it.bt.cagr != null ? `${it.bt.cagr.toFixed(0)}%` : "—"} / MC {it.bt.ruin != null ? `${(it.bt.ruin * 100).toFixed(0)}%` : "—"} / 期待値 {it.bt.expectedValue != null ? `${it.bt.expectedValue.toFixed(1)}%` : "—"} / {it.bt.tradeCount ?? 0}回

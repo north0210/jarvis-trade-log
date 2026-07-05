@@ -1,7 +1,14 @@
-# JARVIS Advisor 設計方針（v1.1 構想 / v1.0 未実装）
+# JARVIS Advisor 設計方針（v1.1〜v1.7 で実装済み）
 
-> ⚠️ 本ドキュメントは **将来拡張 v1.1 の設計方針**です。v1.0 には実装されていません。
-> JARVIS Advisor は**自動売買ではなく判断補助**であり、**投資助言でもありません**。最終判断はユーザーが行います。
+> ✅ **実装状況（v1.7.0 時点）**：本設計は **v1.1〜v1.7 で実装済み**です。
+> 実装範囲：9カテゴリ判定（Strong Buy / Buy / Watch / Hold / 一部利確 / Reduce / 売却候補 / Danger / 見送り）＋
+> 加重合成スコア（Score/Risk/Backtest/MC/Volume/Strategy/Discipline）＋個別銘柄BTの合成反映（`/advisor`）、
+> **Advisorランキング**（`/advisor-ranking`）、**お気に入り**、**Advisorスナップショット履歴/差分**、
+> **AIコメント**（OFF既定・Template/外部プロバイダ・未設定時Templateフォールバック）。
+> 主要ファイル：`src/lib/advisor/*`（engine/rules/context/ranking/snapshot/ai-layer 等）、`src/components/advisorView.tsx`。
+>
+> ⚠️ JARVIS Advisor は**自動売買ではなく判断補助**であり、**投資助言でもありません**。最終判断はユーザーが行います。
+> 以下は当初の設計方針であり、用語（カテゴリ名等）は実装で一部拡張されています。
 
 ## 1. 目的
 
