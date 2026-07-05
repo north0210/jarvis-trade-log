@@ -8,7 +8,7 @@
  */
 import type { JQuantsCredentials } from "./provider";
 import { getCachedSeries, setCachedSeries, type SeriesPoint } from "@/lib/analytics/priceCache";
-import type { V2FinRecord } from "./jquantsV2";
+import type { V2FinRecord, V2MasterRecord } from "./jquantsV2";
 
 export interface JQuantsQuote {
   code: string;
@@ -31,6 +31,10 @@ export interface JQuantsResponse {
   quotes?: JQuantsQuote[];
   series?: SeriesPoint[];
   fins?: V2FinRecord[];
+  master?: V2MasterRecord[];
+  bars?: import("./jquantsV2").V2DailyBar[];
+  pages?: number; // pagination の実ページ数（初回バッチ見積り用）
+  date?: string; // bars-by-date で実際に取得した日付（クランプ後）
 }
 
 export interface SeriesResult {
@@ -71,6 +75,22 @@ export async function fetchJQuantsQuotes(
   credentials: JQuantsCredentials | null
 ): Promise<JQuantsResponse> {
   return callApi({ action: "quotes", codes, apiKey: apiKeyOf(credentials) });
+}
+
+/** 上場銘柄マスタ（/equities/master・date スナップショット）を取得する。 */
+export async function fetchJQuantsMaster(
+  date: string | undefined,
+  credentials: JQuantsCredentials | null
+): Promise<JQuantsResponse> {
+  return callApi({ action: "master", date, apiKey: apiKeyOf(credentials) });
+}
+
+/** 指定日の全銘柄株価（/equities/bars/daily?date=）を取得する。 */
+export async function fetchJQuantsBarsByDate(
+  date: string,
+  credentials: JQuantsCredentials | null
+): Promise<JQuantsResponse> {
+  return callApi({ action: "bars-by-date", date, apiKey: apiKeyOf(credentials) });
 }
 
 /** 銘柄の財務情報（/fins/summary 生レコード）を取得する（V2・APIキー）。 */

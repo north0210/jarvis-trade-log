@@ -14,6 +14,7 @@
 export const JQUANTS_V2_BASE = "https://api.jquants.com/v2";
 export const DAILY_BARS_PATH = "/equities/bars/daily";
 export const FINS_SUMMARY_PATH = "/fins/summary";
+export const EQ_MASTER_PATH = "/equities/master";
 
 /** V2 株価四本値の 1 レコード（使用フィールドのみ。他は無視）。 */
 export interface V2DailyBar {
@@ -22,6 +23,28 @@ export interface V2DailyBar {
   C?: number | null; // 終値（調整前）
   AdjC?: number | null; // 調整済み終値
   Vo?: number | null; // 取引高（調整前）
+  AdjVo?: number | null; // 調整済み取引高（スクリーナーの指標計算に使用）
+}
+
+/**
+ * V2 上場銘柄マスタ（/equities/master）の 1 レコード（生ワイヤ型）。
+ * 数値/コードは文字列。銘柄名・セクター・市場区分を持つ。
+ */
+export interface V2MasterRecord {
+  Date?: string;
+  Code?: string;
+  CoName?: string; // 企業名（日本語）
+  CoNameEn?: string; // 企業名（英語）
+  S17?: string; // 17業種コード
+  S17Nm?: string; // 17業種名
+  S33?: string; // 33業種コード
+  S33Nm?: string; // 33業種名
+  ScaleCat?: string; // TOPIX規模区分
+  Mkt?: string; // 市場区分コード
+  MktNm?: string; // 市場区分名
+  Mrgn?: string; // 貸借区分
+  MrgnNm?: string;
+  ProdCat?: string;
 }
 
 /** アプリ内部で扱う日足の 1 点（priceCache.SeriesPoint と同形）。 */
@@ -185,6 +208,23 @@ export interface V2FinRecord {
   EPS?: string; // 一株当たり当期純利益
   BPS?: string; // 一株当たり純資産
   ShOutFY?: string; // 期末発行済株式数
+}
+
+/** 上場銘柄マスタの取得 URL を組み立てる（date 指定・pagination_key 任意）。 */
+export function buildMasterUrl(params: { date?: string; paginationKey?: string }): string {
+  const q = new URLSearchParams();
+  if (params.date) q.set("date", params.date);
+  if (params.paginationKey) q.set("pagination_key", params.paginationKey);
+  const qs = q.toString();
+  return `${JQUANTS_V2_BASE}${EQ_MASTER_PATH}${qs ? `?${qs}` : ""}`;
+}
+
+/** 日付一括の株価取得 URL を組み立てる（code 省略で全銘柄・pagination_key 任意）。 */
+export function buildBarsByDateUrl(params: { date: string; paginationKey?: string }): string {
+  const q = new URLSearchParams();
+  q.set("date", params.date);
+  if (params.paginationKey) q.set("pagination_key", params.paginationKey);
+  return `${JQUANTS_V2_BASE}${DAILY_BARS_PATH}?${q.toString()}`;
 }
 
 /** 財務情報の取得 URL を組み立てる（code 指定・pagination_key 任意）。 */

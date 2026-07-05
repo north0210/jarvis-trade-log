@@ -24,6 +24,8 @@ import { NextResponse } from "next/server";
 import {
   buildDailyBarsUrl,
   buildFinsUrl,
+  buildMasterUrl,
+  buildBarsByDateUrl,
   mapDailyBars,
   deriveQuote,
   resolveApiKey,
@@ -31,6 +33,7 @@ import {
   clampToCoverage,
   type V2DailyBar,
   type V2FinRecord,
+  type V2MasterRecord,
   type InternalBar,
 } from "@/lib/pricing/jquantsV2";
 
@@ -41,6 +44,7 @@ interface RequestBody {
   code?: string; // series/quote 用
   from?: string; // YYYY-MM-DD
   to?: string; // YYYY-MM-DD
+  date?: string; // master / bars-by-date 用 YYYY-MM-DD
 }
 
 const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
@@ -135,6 +139,38 @@ async function collectBars(apiKey: string, code: string, reqFrom: string, reqTo:
   return { status: 400, bars: [] };
 }
 
+/**
+ * pagination_key に追従して data[] を全ページ収集する汎用ヘルパ。
+ * pages（実ページ数）も返し、初回バッチの所要見積りに用いる。
+ */
+async function fetchAllRows<T>(
+  makeUrl: (paginationKey?: string) => string,
+  apiKey: string
+): Promise<{ status: number; rows: T[]; detail?: string; pages: number }> {
+  const rows: T[] = [];
+  let key: string | undefined;
+  let guard = 0;
+  let pages = 0;
+  do {
+    const res = await fetch(makeUrl(key), { headers: authHeaders(apiKey) });
+    if (!res.ok) {
+      const detail = await upstreamErrorDetail(res);
+      return { status: res.status, rows: [], detail, pages };
+    }
+    const data = (await res.json()) as { data?: T[]; pagination_key?: string };
+    if (Array.isArray(data.data)) rows.push(...data.data);
+    key = data.pagination_key;
+    pages++;
+    guard++;
+  } while (key && guard < 500); // 安全弁（全銘柄×多ページでも十分）
+  return { status: 200, rows, pages };
+}
+
+/** YYYY-MM-DD / YYYYMMDD を YYYY-MM-DD へ正規化する。 */
+function normDate(d: string): string {
+  return d.length === 8 ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` : d;
+}
+
 /** 財務情報を取得する（code 指定・pagination 対応）。 */
 async function fetchFins(
   apiKey: string,
@@ -164,14 +200,8 @@ export async function POST(req: Request) {
   } catch {
     body = {};
   }
-  const action =
-    body.action === "quotes"
-      ? "quotes"
-      : body.action === "series"
-      ? "series"
-      : body.action === "fins"
-      ? "fins"
-      : "test";
+  const KNOWN_ACTIONS = ["quotes", "series", "fins", "master", "bars-by-date"];
+  const action = KNOWN_ACTIONS.includes(body.action ?? "") ? (body.action as string) : "test";
   const { key: apiKey, source: keySource } = resolveApiKey(process.env.JQUANTS_API_KEY, body.apiKey);
 
   if (!apiKey) {
@@ -222,6 +252,39 @@ export async function POST(req: Request) {
       if (r.status === 429) return rateFail();
       if (r.status !== 200) return otherFail(r.status, r.detail ?? "", `財務取得に失敗しました (${code})`);
       return NextResponse.json({ ok: true, status: "connected", fins: r.records });
+    }
+
+    // 上場銘柄マスタ（date 指定・全ページ収集）。
+    if (action === "master") {
+      const date = typeof body.date === "string" && body.date ? normDate(body.date) : undefined;
+      const r = await fetchAllRows<V2MasterRecord>((pk) => buildMasterUrl({ date, paginationKey: pk }), apiKey);
+      if (r.status === 401 || r.status === 403) return authFail(r.status, r.detail ?? "");
+      if (r.status === 429) return rateFail();
+      if (r.status !== 200) return otherFail(r.status, r.detail ?? "", "上場マスタ取得に失敗しました");
+      return NextResponse.json({ ok: true, status: "connected", master: r.rows, pages: r.pages });
+    }
+
+    // 日付一括の全銘柄株価（code 省略）。カバレッジ外の date は終端へクランプして再試行。
+    if (action === "bars-by-date") {
+      const reqDate = typeof body.date === "string" && body.date ? normDate(body.date) : fmtDate(new Date());
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const cov = getCoverageEnd();
+        const date = cov && reqDate > cov ? cov : reqDate;
+        const r = await fetchAllRows<V2DailyBar>((pk) => buildBarsByDateUrl({ date, paginationKey: pk }), apiKey);
+        if (r.status === 401 || r.status === 403) return authFail(r.status, r.detail ?? "");
+        if (r.status === 429) return rateFail();
+        if (r.status === 200) {
+          return NextResponse.json({ ok: true, status: "connected", bars: r.rows, pages: r.pages, date });
+        }
+        // サブスク範囲外を学習して 1 回だけ再クランプ。
+        const range = r.status === 400 ? parseSubscriptionRange(r.detail ?? "") : null;
+        if (range && getCoverageEnd() !== range.to) {
+          coverageCache = { end: range.to, at: Date.now() };
+          continue;
+        }
+        return otherFail(r.status, r.detail ?? "", `日付一括取得に失敗しました (${date})`);
+      }
+      return otherFail(400, "", "日付一括取得に失敗しました");
     }
 
     const to = typeof body.to === "string" ? body.to : fmtDate(new Date());

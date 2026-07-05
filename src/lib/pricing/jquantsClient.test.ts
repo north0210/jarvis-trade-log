@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { testJQuantsConnection, fetchJQuantsQuotes, fetchJQuantsSeries, fetchJQuantsFins } from "./jquantsClient";
+import { testJQuantsConnection, fetchJQuantsQuotes, fetchJQuantsSeries, fetchJQuantsFins, fetchJQuantsMaster, fetchJQuantsBarsByDate } from "./jquantsClient";
 
 // ※ APIキーはダミー値のみ。実 fetch はモック。
 const DUMMY_KEY = "dummy-client-key";
@@ -67,6 +67,32 @@ describe("fetchJQuantsFins", () => {
     expect(body.action).toBe("fins");
     expect(body.code).toBe("7203");
     expect(body.apiKey).toBe(DUMMY_KEY);
+  });
+});
+
+describe("fetchJQuantsMaster", () => {
+  it("action=master・date・apiKey を送り、master と pages を返す", async () => {
+    const fn = mockFetchOnce({ ok: true, status: "connected", master: [{ Code: "72030", CoName: "トヨタ" }], pages: 1 });
+    const res = await fetchJQuantsMaster("2026-04-10", { apiKey: DUMMY_KEY });
+    expect(res.ok).toBe(true);
+    expect(res.master).toHaveLength(1);
+    const body = lastBody(fn);
+    expect(body.action).toBe("master");
+    expect(body.date).toBe("2026-04-10");
+    expect(body.apiKey).toBe(DUMMY_KEY);
+  });
+});
+
+describe("fetchJQuantsBarsByDate", () => {
+  it("action=bars-by-date・date・apiKey を送り、bars/pages/date を返す", async () => {
+    const fn = mockFetchOnce({ ok: true, status: "connected", bars: [{ Code: "72030", Date: "2026-04-10", AdjC: 3050 }], pages: 2, date: "2026-04-10" });
+    const res = await fetchJQuantsBarsByDate("2026-04-10", { apiKey: DUMMY_KEY });
+    expect(res.ok).toBe(true);
+    expect(res.bars).toHaveLength(1);
+    expect(res.pages).toBe(2);
+    const body = lastBody(fn);
+    expect(body.action).toBe("bars-by-date");
+    expect(body.date).toBe("2026-04-10");
   });
 });
 
