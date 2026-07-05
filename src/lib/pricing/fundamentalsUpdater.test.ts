@@ -92,11 +92,19 @@ describe("planFundamentalsUpdate（純関数・computed ?? manual）", () => {
     expect(plan.updatedFields).toEqual([]);
   });
 
-  it("新値がある場合は自動取得日(asOf)を記録・全nullなら既存維持", () => {
-    const withData = planFundamentalsUpdate(stock("7203", { fundamentals_updated_at: "2025-01-01" }), fundamentals({ per: 20, asOf: "2026-03-31" }));
+  it("新値がある場合は自動取得日(asOf)・基準(basis)を記録・全nullなら既存維持", () => {
+    const withData = planFundamentalsUpdate(
+      stock("7203", { fundamentals_updated_at: "2025-01-01", fundamentals_basis: "quarter" }),
+      fundamentals({ per: 20, asOf: "2026-03-31", basis: "FY" })
+    );
     expect(withData.updates.fundamentals_updated_at).toBe("2026-03-31");
-    const noData = planFundamentalsUpdate(stock("7203", { fundamentals_updated_at: "2025-01-01" }), fundamentals());
+    expect(withData.updates.fundamentals_basis).toBe("FY");
+    const noData = planFundamentalsUpdate(
+      stock("7203", { fundamentals_updated_at: "2025-01-01", fundamentals_basis: "FY" }),
+      fundamentals()
+    );
     expect(noData.updates.fundamentals_updated_at).toBe("2025-01-01"); // 非破壊
+    expect(noData.updates.fundamentals_basis).toBe("FY"); // 非破壊
   });
 });
 

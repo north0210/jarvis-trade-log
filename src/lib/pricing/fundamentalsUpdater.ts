@@ -21,8 +21,8 @@ type FundamentalField = "per" | "pbr" | "roe" | "operating_margin" | "sales_grow
 
 export interface FundamentalsUpdatePlan {
   code: string;
-  /** computed ?? 既存値 でマージ済みの値（自動取得日を含む）。 */
-  updates: Pick<Stock, FundamentalField | "fundamentals_updated_at">;
+  /** computed ?? 既存値 でマージ済みの値（自動取得日・基準を含む）。 */
+  updates: Pick<Stock, FundamentalField | "fundamentals_updated_at" | "fundamentals_basis">;
   /** 実際に新値（API 由来・非 null）が入るフィールド名。 */
   updatedFields: FundamentalField[];
 }
@@ -48,15 +48,16 @@ export function planFundamentalsUpdate(stock: Stock, f: Fundamentals): Fundament
   if (f.operatingMargin != null) updatedFields.push("operating_margin");
   if (f.salesGrowth != null) updatedFields.push("sales_growth");
 
-  const updates: Pick<Stock, FundamentalField | "fundamentals_updated_at"> = {
+  const hasNew = updatedFields.length > 0;
+  const updates: Pick<Stock, FundamentalField | "fundamentals_updated_at" | "fundamentals_basis"> = {
     per: f.per ?? stock.per,
     pbr: f.pbr ?? stock.pbr,
     roe: f.roe ?? stock.roe,
     operating_margin: f.operatingMargin ?? stock.operating_margin,
     sales_growth: f.salesGrowth ?? stock.sales_growth,
-    // 新値が入る場合のみ自動取得日（開示日）を更新。無変更なら既存を維持（非破壊）。
-    fundamentals_updated_at:
-      updatedFields.length > 0 ? f.asOf ?? stock.fundamentals_updated_at : stock.fundamentals_updated_at,
+    // 新値が入る場合のみ自動取得日（開示日）・基準を更新。無変更なら既存を維持（非破壊）。
+    fundamentals_updated_at: hasNew ? f.asOf ?? stock.fundamentals_updated_at : stock.fundamentals_updated_at,
+    fundamentals_basis: hasNew ? f.basis ?? stock.fundamentals_basis : stock.fundamentals_basis,
   };
   return { code: stock.code, updates, updatedFields };
 }

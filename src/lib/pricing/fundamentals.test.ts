@@ -5,6 +5,7 @@ import {
   selectPrimary,
   findPriorYear,
   computeFundamentals,
+  elapsedLabel,
 } from "./fundamentals";
 import type { V2FinRecord } from "./jquantsV2";
 
@@ -24,6 +25,22 @@ describe("parseFinNum（文字列数値のパース）", () => {
     expect(parseFinNum("  ")).toBeNull();
     expect(parseFinNum("N/A")).toBeNull();
     expect(parseFinNum(undefined)).toBeNull();
+  });
+});
+
+describe("elapsedLabel（開示日からの経過を動的表示）", () => {
+  const now = Date.parse("2026-07-05");
+  it("45日未満は日数表示", () => {
+    expect(elapsedLabel("2026-07-01", now)).toBe("約4日前");
+  });
+  it("数ヶ月は月表示（四捨五入）", () => {
+    expect(elapsedLabel("2026-04-12", now)).toBe("約3ヶ月前"); // 84日≈2.8ヶ月
+  });
+  it("本決算のような約14ヶ月前も月表示（固定注記の乖離を解消）", () => {
+    expect(elapsedLabel("2025-05-08", now)).toBe("約14ヶ月前");
+  });
+  it("不正日付は空文字", () => {
+    expect(elapsedLabel("bogus", now)).toBe("");
   });
 });
 

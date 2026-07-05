@@ -11,6 +11,10 @@
  *
  * ※ ROE は EPS/BPS（1株ベース）で近似する。会社公表の ROE（当期純利益÷自己資本）とは
  *   端数・少数株主持分・期中平均の扱いにより **微差が生じ得る**（実装上の近似）。
+ *
+ * ※ 将来課題（TTM）: 現状は FY（本決算・年次）を優先採用する。四半期を採用すると EPS/BPS が
+ *   累計（部分期）になり PER/ROE が歪むため、四半期採用時は TTM（直近4四半期）での年換算が必要。
+ *   本 MVP では歪み回避を優先し FY 優先を維持する（未実装）。
  */
 import type { V2FinRecord } from "./jquantsV2";
 
@@ -50,6 +54,19 @@ export const EMPTY_FUNDAMENTALS: Fundamentals = {
   basis: null,
   asOf: null,
 };
+
+/**
+ * 開示日（YYYY-MM-DD）から現在(nowMs)までの経過を「約N日前 / 約Nヶ月前」で表す。
+ * 固定の遅延注記の代わりに実データの鮮度を動的表示するために使う。
+ */
+export function elapsedLabel(dateStr: string, nowMs: number): string {
+  const from = Date.parse(dateStr);
+  if (!Number.isFinite(from)) return "";
+  const days = Math.max(0, Math.floor((nowMs - from) / (24 * 60 * 60 * 1000)));
+  if (days < 45) return `約${days}日前`;
+  const months = Math.round(days / 30.44);
+  return `約${months}ヶ月前`;
+}
 
 /** 文字列の数値（"", 非数値は null）をパースする。 */
 export function parseFinNum(v: string | undefined | null): number | null {

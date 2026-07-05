@@ -14,6 +14,7 @@ import { isTradingViewEnabled } from "@/lib/tradingview";
 import { getProviderMode } from "@/lib/pricing/settings";
 import { updateAllPrices, updateStockPrice } from "@/lib/pricing/priceUpdater";
 import { updateAllFundamentals } from "@/lib/pricing/fundamentalsUpdater";
+import { elapsedLabel } from "@/lib/pricing/fundamentals";
 import { quickSetup, type QuickSetupResult } from "@/lib/advisor/quick-setup";
 
 const repo = getStockRepository();
@@ -217,7 +218,7 @@ export default function StocksPage() {
     fundAbortRef.current = controller;
     setFunding(true);
     setFundProgress(null);
-    setPriceMsg("財務データ取得中です、ボス…（無料プランは約3ヶ月遅延）");
+    setPriceMsg("財務データ取得中です、ボス…（決算開示ベース・遅延あり）");
     const r = await updateAllFundamentals({
       signal: controller.signal,
       onProgress: (p) => setFundProgress({ done: p.done, total: p.total }),
@@ -242,7 +243,7 @@ export default function StocksPage() {
         <h2 className="hud-label mb-2">⚡ クイックセットアップ（コード入力→自動評価）</h2>
         <p className="text-xs text-arcdim mb-3">
           銘柄コードを入力すると、登録 → 価格/RSI/MACD/出来高 自動取得 → Advisor評価 → AIコメント → 保存 を一括実行します。
-          PER/PBR/ROE/営業利益率/売上成長率 は「財務指標更新」で自動取得（約3ヶ月遅延）。取得できない指標は手入力値を維持します。判断補助であり投資助言ではありません。
+          PER/PBR/ROE/営業利益率/売上成長率 は「財務指標更新」で自動取得（決算開示ベース）。取得できない指標は手入力値を維持します。判断補助であり投資助言ではありません。
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <label className="block">
@@ -372,7 +373,7 @@ export default function StocksPage() {
         </div>
         <p className="text-xs text-arcdim mb-3">
           価格更新で 現在値/RSI/MACD/相対出来高、財務指標更新で PER/PBR/ROE/営業利益率/売上成長率 を自動取得（J-Quantsモード）。
-          財務は決算開示ベースで<strong className="text-caution">約3ヶ月遅延</strong>（各行に自動取得日を併記）。手入力値は自動取得できない指標のフォールバックとして維持されます。
+          財務は決算開示ベース（<strong className="text-caution">本決算/年次を優先</strong>のため、最新本決算が数ヶ月〜1年程度前になることがあります）。各行に開示日と経過・基準を併記。手入力値は自動取得できない指標のフォールバックとして維持されます。
         </p>
         {priceMsg && (
           <p className="text-arc text-sm font-mono border border-arc/40 bg-arc/5 rounded px-3 py-2 mb-3">
@@ -423,7 +424,12 @@ export default function StocksPage() {
                       </span>
                       <span className="block text-[10px] text-arcdim">
                         財務: {s.fundamentals_updated_at
-                          ? `自動取得 ${s.fundamentals_updated_at.slice(0, 10)}（≈3ヶ月遅延）`
+                          ? (() => {
+                              const date = s.fundamentals_updated_at.slice(0, 10);
+                              const basisJp = s.fundamentals_basis === "FY" ? "本決算" : s.fundamentals_basis === "quarter" ? "四半期" : null;
+                              const parts = [basisJp, elapsedLabel(s.fundamentals_updated_at, Date.now())].filter(Boolean);
+                              return `自動取得 ${date}${parts.length ? `（${parts.join("・")}）` : ""}`;
+                            })()
                           : "手入力"}
                       </span>
                     </td>
