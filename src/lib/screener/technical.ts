@@ -13,6 +13,7 @@ import { scoreStock, type ScoreResult } from "@/lib/score";
 import { calculateRSI } from "@/lib/indicators/rsi";
 import { computeMacdState } from "@/lib/indicators/macd";
 import { computeVolumeMetrics } from "@/lib/indicators/volume";
+import type { Fundamentals } from "@/lib/pricing/fundamentals";
 import type { UniverseEntry, AdjBar } from "./universe";
 
 export interface ScreenerRow {
@@ -26,6 +27,17 @@ export interface ScreenerRow {
   relativeVolume: number | null;
   score: number;
   grade: ScoreResult["grade"];
+  // 財務（Stage 4b で技術上位のみ付与。技術のみの行では未設定/false）
+  // ※ roe は fundamentals.ts の EPS/BPS 近似（公表値と微差が出得る）を継承する。
+  per?: number | null;
+  pbr?: number | null;
+  roe?: number | null;
+  operatingMargin?: number | null;
+  salesGrowth?: number | null;
+  fundamentalsBasis?: "FY" | "quarter" | null;
+  fundamentalsAsOf?: string | null;
+  /** 財務を取得できたか（false=財務未取得・技術スコアのみ）。 */
+  fundamentalsAvailable?: boolean;
 }
 
 const nums = (xs: (number | null)[]): number[] => xs.filter((v): v is number => v != null);
@@ -100,6 +112,68 @@ export function buildScreenerRows(
     rows.push(screenRow(entry, series));
   }
   return rows;
+}
+
+/** ScreenerRow の技術情報から合成 Stock を復元する（再スコア用）。 */
+function stockFromRow(row: ScreenerRow): Stock {
+  return {
+    id: row.code,
+    code: row.code,
+    name: row.name,
+    market: row.market || null,
+    theme: null,
+    per: null,
+    pbr: null,
+    roe: null,
+    sales_growth: null,
+    operating_margin: null,
+    rsi: row.rsi,
+    macd: row.macd,
+    current_price: row.price,
+    stop_loss: null,
+    take_profit: null,
+    rank: "C",
+    status: "見送り",
+    memo: null,
+    price_updated_at: null,
+    relativeVolume: row.relativeVolume ?? undefined,
+  } as Stock;
+}
+
+/**
+ * 技術行に財務指標を合成してフルスコア/grade を再算出する（Stage 4b）。
+ * - f が null / 全指標 null（＝財務未取得・欠損）の場合は技術スコアのまま残留し、
+ *   fundamentalsAvailable=false を記録（行を破棄しない）。
+ * - roe は fundamentals.ts の EPS/BPS 近似（公表値と微差が出得る）を継承。
+ */
+export function rescoreWithFundamentals(row: ScreenerRow, f: Fundamentals | null): ScreenerRow {
+  const hasFund =
+    !!f &&
+    (f.per != null || f.pbr != null || f.roe != null || f.operatingMargin != null || f.salesGrowth != null);
+
+  const stock: Stock = {
+    ...stockFromRow(row),
+    per: f?.per ?? null,
+    pbr: f?.pbr ?? null,
+    roe: f?.roe ?? null,
+    operating_margin: f?.operatingMargin ?? null,
+    sales_growth: f?.salesGrowth ?? null,
+  };
+  const result = scoreStock(stock);
+
+  return {
+    ...row,
+    per: f?.per ?? null,
+    pbr: f?.pbr ?? null,
+    roe: f?.roe ?? null,
+    operatingMargin: f?.operatingMargin ?? null,
+    salesGrowth: f?.salesGrowth ?? null,
+    fundamentalsBasis: f?.basis ?? null,
+    fundamentalsAsOf: f?.asOf ?? null,
+    fundamentalsAvailable: hasFund,
+    score: result.score,
+    grade: result.grade,
+  };
 }
 
 /** スコア降順に並べる。同点は code 昇順で決定的に安定化する。 */

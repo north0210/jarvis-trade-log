@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { toSyntheticStock, screenRow, buildScreenerRows, rankRows, selectTopN, type ScreenerRow } from "./technical";
+import { toSyntheticStock, screenRow, buildScreenerRows, rankRows, selectTopN, rescoreWithFundamentals, type ScreenerRow } from "./technical";
 import type { UniverseEntry, AdjBar } from "./universe";
+import type { Fundamentals } from "@/lib/pricing/fundamentals";
 
 function entry(code: string, over: Partial<UniverseEntry> = {}): UniverseEntry {
   return { code, name: `銘柄${code}`, nameEn: "", sector17: "", sector33: "情報通信", scaleCategory: "", market: "プライム", ...over };
@@ -82,6 +83,37 @@ describe("selectTopN", () => {
     const rows = [mk("a", 10), mk("b", 30)];
     expect(selectTopN(rows, 0)).toEqual([]);
     expect(selectTopN(rows, 99)).toHaveLength(2);
+  });
+});
+
+describe("rescoreWithFundamentals（二段目・フルスコア）", () => {
+  const baseRow = (): ScreenerRow => screenRow(entry("7203"), risingSeries());
+  const fund = (o: Partial<Fundamentals> = {}): Fundamentals => ({ per: null, pbr: null, roe: null, operatingMargin: null, salesGrowth: null, basis: null, asOf: null, ...o });
+
+  it("財務ありでフルスコア再算出・basis/取得日/available を記録", () => {
+    const row = baseRow();
+    const rescored = rescoreWithFundamentals(row, fund({ per: 15, pbr: 2, roe: 25, operatingMargin: 22, salesGrowth: 12, basis: "FY", asOf: "2026-03-31" }));
+    expect(rescored.fundamentalsAvailable).toBe(true);
+    expect(rescored.fundamentalsBasis).toBe("FY");
+    expect(rescored.fundamentalsAsOf).toBe("2026-03-31");
+    expect(rescored.roe).toBe(25);
+    // 財務加点で技術のみより高くなる
+    expect(rescored.score).toBeGreaterThan(row.score);
+  });
+
+  it("f=null は技術スコアのまま残留・financials 未取得を記録（破棄しない）", () => {
+    const row = baseRow();
+    const rescored = rescoreWithFundamentals(row, null);
+    expect(rescored.fundamentalsAvailable).toBe(false);
+    expect(rescored.score).toBe(row.score); // 技術スコア不変
+    expect(rescored.per).toBeNull();
+  });
+
+  it("全 null 財務（欠損）も available=false・技術スコア維持", () => {
+    const row = baseRow();
+    const rescored = rescoreWithFundamentals(row, fund());
+    expect(rescored.fundamentalsAvailable).toBe(false);
+    expect(rescored.score).toBe(row.score);
   });
 });
 
