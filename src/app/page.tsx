@@ -8,7 +8,6 @@ import { getHoldingRepository } from "@/lib/storage/holdingRepository";
 import { getJournalRepository } from "@/lib/storage/journalRepository";
 import type { Holding, Journal, Stock } from "@/lib/types";
 import { holdingAlerts, stockAlerts, pnl, type Alert } from "@/lib/alerts";
-import { getPriceProvider } from "@/lib/pricing/provider";
 import { getLastBackup, formatBackupTime } from "@/lib/storage/exportService";
 import { getGenerations } from "@/lib/backup/backup-service";
 import { getDashboardRuns } from "@/lib/settings/performance";
@@ -451,12 +450,9 @@ export default function Dashboard() {
     [stocks]
   );
 
-  // PriceProvider経由で価格を参照する例（Manual＝手入力値）。
-  // ダッシュボード表示では実API通信を行わない（自動更新は未実装。更新は銘柄画面の「価格更新」から）。
-  useEffect(() => {
-    if (stocks.length === 0) return;
-    getPriceProvider(stocks).fetchQuotes(stocks.map((s) => s.code));
-  }, [stocks]);
+  // ダッシュボードは永続化済みの価格・指標（stock.current_price / rsi / macd）を表示するのみ。
+  // 価格の取得・更新は銘柄／設定画面の「価格更新」→ PriceProvider（priceUpdater）に一本化。
+  // ここでは実API通信を行わない（自動取得はしない設計）。
 
   if (loading)
     return <p className="hud-label animate-pulse">SYSTEM BOOT — データ照会中…</p>;
