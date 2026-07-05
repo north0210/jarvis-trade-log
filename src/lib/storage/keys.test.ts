@@ -231,6 +231,11 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
     expect(K.priceCache + "7203").toBe("jarvis-trade-log:price-cache:7203");
     expect(`${K.priceCache}9984`).toBe("jarvis-trade-log:price-cache:9984");
   });
+
+  it("K が要注意帯⑩(backup-service メタキー)を正しく指す（6-1 変換対象）", () => {
+    expect(K.backupGenerations).toBe("jarvis-trade-log:backup-generations");
+    expect(K.lastBackup).toBe("jarvis-trade-log:lastBackup");
+  });
 });
 
 describe("refName（A-1: 参照識別子）の固定化", () => {

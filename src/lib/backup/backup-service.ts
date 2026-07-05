@@ -8,12 +8,13 @@
  * 認証情報・価格キャッシュ等の機微/一時データはバックアップ対象外（安全側）。
  */
 
-import { BACKUP_KEY_DEFS, type BackupItemKind, type RestoreUnit } from "@/lib/storage/keys";
+import { BACKUP_KEY_DEFS, K, type BackupItemKind, type RestoreUnit } from "@/lib/storage/keys";
 
 const APP = "jarvis-trade-log";
 export const FULL_VERSION = 2;
-const GENERATIONS_KEY = "jarvis-trade-log:backup-generations";
-const LAST_BACKUP_KEY = "jarvis-trade-log:lastBackup";
+// メタキー（backup除外）。BACKUP_ITEMS 導出には含めない（入れ子回避）。
+const GENERATIONS_KEY = K.backupGenerations;
+const LAST_BACKUP_KEY = K.lastBackup;
 const MAX_GENERATIONS = 3;
 
 // 型は keys.ts に集約。既存の import 互換のため re-export する。
