@@ -109,6 +109,10 @@ export interface BarsBatchResult {
   emptyDates: number; // データ空（休場/祝日等）の日数
   totalPages: number; // pagination 実ページ総数（所要見積り用）
   stopped: BulkStop | null;
+  /** 初回1発目 rate の自動待機リトライを実施したか（診断用）。 */
+  retried: boolean;
+  /** 中断した bars リクエスト番号（1始まり・診断用）。 */
+  stoppedAt?: number;
 }
 
 /**
@@ -128,6 +132,7 @@ export async function fetchBarsBatch(
   let empty = 0;
   let totalPages = 0;
   let done = 0;
+  let retried = false;
 
   const finalize = (stopped: BulkStop | null): BarsBatchResult => ({
     seriesByCode: assembleAdjSeries(allBars),
@@ -136,6 +141,8 @@ export async function fetchBarsBatch(
     emptyDates: empty,
     totalPages,
     stopped,
+    retried,
+    stoppedAt: stopped ? done + 1 : undefined,
   });
 
   for (const date of dates) {
@@ -151,6 +158,7 @@ export async function fetchBarsBatch(
 
     // 初回1発目の rate のみ自動待機して1回だけリトライ（bars 途中の rate は破棄）。
     if (!res.ok && res.reason === "rate" && fetched === 0) {
+      retried = true;
       try {
         await sleep(retryWaitMs, opts?.signal);
       } catch (e) {

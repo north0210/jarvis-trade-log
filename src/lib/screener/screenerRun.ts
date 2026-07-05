@@ -113,7 +113,10 @@ export async function runScreener(
     signal,
     onProgress: (p) => opts?.onProgress?.("bars", p.done, p.total),
   });
-  if (batch.stopped) return discard(batch.stopped, stopMessage("bars", batch.stopped));
+  if (batch.stopped) {
+    const diag = ` [${batch.stoppedAt ?? "?"}/${dates.length}日目・自動リトライ: ${batch.retried ? "実施" : "未実施"}]`;
+    return discard(batch.stopped, stopMessage("bars", batch.stopped) + diag);
+  }
 
   // 3) 技術ランク → 上位N
   const rows = buildScreenerRows(common, batch.seriesByCode);

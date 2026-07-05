@@ -120,10 +120,11 @@ describe("fetchBarsBatch", () => {
     const r = await fetchBarsBatch(["2026-04-10"], { apiKey: DUMMY_KEY }, { limiter: NO_WAIT, sleep, retryWaitMs: 1 });
     expect(sleep).toHaveBeenCalledTimes(1);
     expect(r.stopped).toBeNull();
+    expect(r.retried).toBe(true); // 診断: リトライ実施
     expect(r.seriesByCode.has("72030")).toBe(true);
   });
 
-  it("2件目以降の rate はリトライせず破棄（stopped=rate）", async () => {
+  it("2件目以降の rate はリトライせず破棄（stopped=rate・診断情報）", async () => {
     fetchJQuantsBarsByDate
       .mockResolvedValueOnce(barsResp("2026-04-10", ["72030"]))
       .mockResolvedValueOnce({ ok: false, status: "error", reason: "rate" });
@@ -131,5 +132,7 @@ describe("fetchBarsBatch", () => {
     const r = await fetchBarsBatch(["2026-04-10", "2026-04-09"], { apiKey: DUMMY_KEY }, { limiter: NO_WAIT, sleep });
     expect(sleep).not.toHaveBeenCalled();
     expect(r.stopped).toBe("rate");
+    expect(r.retried).toBe(false); // 診断: 未実施（mid-batch）
+    expect(r.stoppedAt).toBe(2); // 診断: 2日目で停止
   });
 });

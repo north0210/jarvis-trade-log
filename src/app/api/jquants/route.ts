@@ -21,6 +21,7 @@
  *         code?: string, from?: string, to?: string }
  */
 import { NextResponse } from "next/server";
+import { acquireServerToken } from "@/lib/pricing/serverRateLimiter";
 import {
   buildDailyBarsUrl,
   buildFinsUrl,
@@ -52,6 +53,15 @@ const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
 /** x-api-key ヘッダを組み立てる。 */
 function authHeaders(apiKey: string): HeadersInit {
   return { "x-api-key": apiKey };
+}
+
+/**
+ * J-Quants へのリクエスト。**サーバ側リミッタ（APIキー単位・プロセス内）**でトークンを
+ * 取得してから実行する（クライアントのリロード/HMR/複数タブに影響されない権威ある枠）。
+ */
+async function jqFetch(url: string, apiKey: string): Promise<Response> {
+  await acquireServerToken(apiKey);
+  return fetch(url, { headers: authHeaders(apiKey) });
 }
 
 /**
@@ -107,9 +117,9 @@ async function collectBars(apiKey: string, code: string, reqFrom: string, reqTo:
     let learned = false;
 
     do {
-      const res = await fetch(
+      const res = await jqFetch(
         buildDailyBarsUrl({ code, from: clamp.from, to: clamp.to, paginationKey: key }),
-        { headers: authHeaders(apiKey) }
+        apiKey
       );
       if (!res.ok) {
         failStatus = res.status;
@@ -152,7 +162,7 @@ async function fetchAllRows<T>(
   let guard = 0;
   let pages = 0;
   do {
-    const res = await fetch(makeUrl(key), { headers: authHeaders(apiKey) });
+    const res = await jqFetch(makeUrl(key), apiKey);
     if (!res.ok) {
       const detail = await upstreamErrorDetail(res);
       return { status: res.status, rows: [], detail, pages };
@@ -180,7 +190,7 @@ async function fetchFins(
   let key: string | undefined;
   let guard = 0;
   do {
-    const res = await fetch(buildFinsUrl({ code, paginationKey: key }), { headers: authHeaders(apiKey) });
+    const res = await jqFetch(buildFinsUrl({ code, paginationKey: key }), apiKey);
     if (!res.ok) {
       const detail = await upstreamErrorDetail(res);
       return { status: res.status, records: [], detail };

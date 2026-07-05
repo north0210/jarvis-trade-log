@@ -41,7 +41,7 @@ function rising(len = 40, start = 100): AdjBar[] {
 }
 function batchResult(codes: string[], stopped: BarsBatchResult["stopped"] = null): BarsBatchResult {
   const seriesByCode = new Map<string, AdjBar[]>(codes.map((c) => [c, rising()]));
-  return { seriesByCode, requestedDates: 40, fetchedDates: 40, emptyDates: 0, totalPages: 40, stopped };
+  return { seriesByCode, requestedDates: 40, fetchedDates: 40, emptyDates: 0, totalPages: 40, stopped, retried: false, stoppedAt: stopped ? 4 : undefined };
 }
 function fund(o: Partial<Fundamentals> = {}): Fundamentals {
   return { per: null, pbr: null, roe: null, operatingMargin: null, salesGrowth: null, basis: null, asOf: null, ...o };
@@ -143,6 +143,9 @@ describe("runScreener（Stage 4b オーケストレーション）", () => {
     expect(r.message).toContain("レート制限");
     expect(r.message).toContain("価格系列");
     expect(r.message).toContain("再試行");
+    // 診断: 停止した日番号と自動リトライ有無を表示
+    expect(r.message).toContain("日目");
+    expect(r.message).toContain("自動リトライ: 未実施");
     expect(h.saveSnapshot).not.toHaveBeenCalled();
   });
 

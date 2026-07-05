@@ -86,16 +86,19 @@ export function createRateLimiter(opts: RateLimiterOptions): RateLimiter {
   };
 }
 
-// ---- J-Quants 共有リミッタ（APIキー単位 5req/分） ----
-
-const CAPACITY = 5;
-const REFILL_MS = 12_000; // 60_000 / 5
+// ---- J-Quants 共有リミッタ（APIキー単位） ----
+//
+// バースト排除: capacity=1（初期バーストなし）＋ refill 15s（=4req/分）で、
+// J-Quants の 5req/分（ローリング窓）に対して**余裕を持って厳密に間隔取得**する。
+// （capacity>1 は初期バースト＋補充で 5/分を超え 429 を誘発するため 1 とする。）
+export const JQUANTS_LIMITER_CAPACITY = 1;
+export const JQUANTS_LIMITER_REFILL_MS = 15_000; // 60_000 / 4（余裕）
 
 let shared: RateLimiter | null = null;
 
 /** J-Quants 用の共有リミッタ（bulk/single/auto-update が同一予算を消費）。 */
 export function getJQuantsRateLimiter(): RateLimiter {
-  if (!shared) shared = createRateLimiter({ capacity: CAPACITY, refillMs: REFILL_MS });
+  if (!shared) shared = createRateLimiter({ capacity: JQUANTS_LIMITER_CAPACITY, refillMs: JQUANTS_LIMITER_REFILL_MS });
   return shared;
 }
 

@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { createRateLimiter } from "./rateLimiter";
+import { createRateLimiter, JQUANTS_LIMITER_CAPACITY, JQUANTS_LIMITER_REFILL_MS } from "./rateLimiter";
+
+describe("J-Quants 共有リミッタの設定（バースト排除・余裕）", () => {
+  it("capacity=1（初期バーストなし）・refill=15s（4req/分＜5req/分）", () => {
+    expect(JQUANTS_LIMITER_CAPACITY).toBe(1);
+    expect(JQUANTS_LIMITER_REFILL_MS).toBe(15_000);
+    // 4req/分 ≤ 5req/分（J-Quants）で余裕がある
+    expect(60_000 / JQUANTS_LIMITER_REFILL_MS).toBeLessThanOrEqual(5);
+  });
+});
 
 /** fake クロック: sleep で時計を進める（実待機なし）。 */
 function fakeClock() {
