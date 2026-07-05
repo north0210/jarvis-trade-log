@@ -32,6 +32,8 @@ export interface Stock {
   volume?: number;
   volumeTrend?: "increasing" | "decreasing" | "flat" | "unknown";
   relativeVolume?: number;
+  // 財務指標の自動取得日（J-Quants /fins/summary の開示日。約3ヶ月遅延。任意・非破壊）
+  fundamentals_updated_at?: string;
 }
 
 export interface Holding {

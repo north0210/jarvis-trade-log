@@ -91,6 +91,13 @@ describe("planFundamentalsUpdate（純関数・computed ?? manual）", () => {
     const plan = planFundamentalsUpdate(stock("7203"), fundamentals());
     expect(plan.updatedFields).toEqual([]);
   });
+
+  it("新値がある場合は自動取得日(asOf)を記録・全nullなら既存維持", () => {
+    const withData = planFundamentalsUpdate(stock("7203", { fundamentals_updated_at: "2025-01-01" }), fundamentals({ per: 20, asOf: "2026-03-31" }));
+    expect(withData.updates.fundamentals_updated_at).toBe("2026-03-31");
+    const noData = planFundamentalsUpdate(stock("7203", { fundamentals_updated_at: "2025-01-01" }), fundamentals());
+    expect(noData.updates.fundamentals_updated_at).toBe("2025-01-01"); // 非破壊
+  });
 });
 
 describe("updateAllFundamentals（書き込み部）", () => {

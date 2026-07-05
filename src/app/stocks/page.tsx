@@ -13,6 +13,7 @@ import TradingViewChartModal from "@/components/TradingViewChartModal";
 import { isTradingViewEnabled } from "@/lib/tradingview";
 import { getProviderMode } from "@/lib/pricing/settings";
 import { updateAllPrices, updateStockPrice } from "@/lib/pricing/priceUpdater";
+import { updateAllFundamentals } from "@/lib/pricing/fundamentalsUpdater";
 import { quickSetup, type QuickSetupResult } from "@/lib/advisor/quick-setup";
 
 const repo = getStockRepository();
@@ -64,6 +65,9 @@ export default function StocksPage() {
   const [updating, setUpdating] = useState(false);
   const [priceProgress, setPriceProgress] = useState<{ done: number; total: number } | null>(null);
   const bulkAbortRef = useRef<AbortController | null>(null);
+  const [funding, setFunding] = useState(false);
+  const [fundProgress, setFundProgress] = useState<{ done: number; total: number } | null>(null);
+  const fundAbortRef = useRef<AbortController | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [quickCode, setQuickCode] = useState("");
   const [quickName, setQuickName] = useState("");
@@ -203,6 +207,28 @@ export default function StocksPage() {
     load();
   };
 
+  // 財務指標更新: J-Quants /fins/summary から PER/PBR/ROE/営業利益率/売上成長率 を自動反映。
+  const updateFundamentals = async () => {
+    if (getProviderMode() === "manual") {
+      setPriceMsg("現在は手入力モードです。財務指標の自動取得には設定画面で J-Quants モードに切り替えてください。");
+      return;
+    }
+    const controller = new AbortController();
+    fundAbortRef.current = controller;
+    setFunding(true);
+    setFundProgress(null);
+    setPriceMsg("財務データ取得中です、ボス…（無料プランは約3ヶ月遅延）");
+    const r = await updateAllFundamentals({
+      signal: controller.signal,
+      onProgress: (p) => setFundProgress({ done: p.done, total: p.total }),
+    });
+    setFunding(false);
+    setFundProgress(null);
+    fundAbortRef.current = null;
+    setPriceMsg(`${r.message}（更新：${r.successCount}件 / ${r.fieldCount}指標）。PER/PBR は現在値×最新決算で算出。ROEはEPS/BPS近似。`);
+    load();
+  };
+
   const field = (label: string, node: React.ReactNode) => (
     <label className="block">
       <span className="hud-label">{label}</span>
@@ -216,7 +242,7 @@ export default function StocksPage() {
         <h2 className="hud-label mb-2">⚡ クイックセットアップ（コード入力→自動評価）</h2>
         <p className="text-xs text-arcdim mb-3">
           銘柄コードを入力すると、登録 → 価格/RSI/MACD/出来高 自動取得 → Advisor評価 → AIコメント → 保存 を一括実行します。
-          PER/PBR/ROE/営業利益率/売上成長率 は自動取得できないため手入力（欠損は明示）。判断補助であり投資助言ではありません。
+          PER/PBR/ROE/営業利益率/売上成長率 は「財務指標更新」で自動取得（約3ヶ月遅延）。取得できない指標は手入力値を維持します。判断補助であり投資助言ではありません。
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <label className="block">
@@ -316,7 +342,7 @@ export default function StocksPage() {
           <h2 className="hud-label">銘柄一覧 ({stocks.length})</h2>
           <div className="flex items-center gap-2">
             <Link href="/advisor" className="hud-btn text-xs px-3 py-1">Advisorで再評価 →</Link>
-            <button className="hud-btn text-xs px-3 py-1" onClick={updatePrices} disabled={updating}>
+            <button className="hud-btn text-xs px-3 py-1" onClick={updatePrices} disabled={updating || funding}>
               {updating ? "更新中…" : "価格更新（一括）"}
             </button>
             {updating && (
@@ -329,9 +355,25 @@ export default function StocksPage() {
                 </button>
               </>
             )}
+            <button className="hud-btn text-xs px-3 py-1" onClick={updateFundamentals} disabled={updating || funding}>
+              {funding ? "更新中…" : "財務指標更新（一括）"}
+            </button>
+            {funding && (
+              <>
+                {fundProgress && (
+                  <span className="text-arc text-xs">{fundProgress.done}/{fundProgress.total} 件</span>
+                )}
+                <button className="hud-btn text-xs px-3 py-1" onClick={() => fundAbortRef.current?.abort()}>
+                  中断
+                </button>
+              </>
+            )}
           </div>
         </div>
-        <p className="text-xs text-arcdim mb-3">価格更新で 現在値/RSI/MACD/相対出来高 を自動取得（J-Quantsモード）。PER/PBR/ROE/営業利益率/売上成長率 は手入力です（未取得は「データ不足」表示）。</p>
+        <p className="text-xs text-arcdim mb-3">
+          価格更新で 現在値/RSI/MACD/相対出来高、財務指標更新で PER/PBR/ROE/営業利益率/売上成長率 を自動取得（J-Quantsモード）。
+          財務は決算開示ベースで<strong className="text-caution">約3ヶ月遅延</strong>（各行に自動取得日を併記）。手入力値は自動取得できない指標のフォールバックとして維持されます。
+        </p>
         {priceMsg && (
           <p className="text-arc text-sm font-mono border border-arc/40 bg-arc/5 rounded px-3 py-2 mb-3">
             {priceMsg}
@@ -377,7 +419,12 @@ export default function StocksPage() {
                         return miss.length > 0 ? <span className="ml-1 text-[10px] text-caution border border-caution/50 rounded px-1">データ不足</span> : null;
                       })()}
                       <span className="block text-[10px] text-arcdim">
-                        {s.price_updated_at ? `自動取得 ${s.price_updated_at.slice(0, 10)}` : "未取得（手入力）"}
+                        価格: {s.price_updated_at ? `自動取得 ${s.price_updated_at.slice(0, 10)}` : "未取得（手入力）"}
+                      </span>
+                      <span className="block text-[10px] text-arcdim">
+                        財務: {s.fundamentals_updated_at
+                          ? `自動取得 ${s.fundamentals_updated_at.slice(0, 10)}（≈3ヶ月遅延）`
+                          : "手入力"}
                       </span>
                     </td>
                     <td className="py-2 pr-3">{s.status}</td>

@@ -21,8 +21,8 @@ type FundamentalField = "per" | "pbr" | "roe" | "operating_margin" | "sales_grow
 
 export interface FundamentalsUpdatePlan {
   code: string;
-  /** computed ?? 既存値 でマージ済みの値。 */
-  updates: Pick<Stock, FundamentalField>;
+  /** computed ?? 既存値 でマージ済みの値（自動取得日を含む）。 */
+  updates: Pick<Stock, FundamentalField | "fundamentals_updated_at">;
   /** 実際に新値（API 由来・非 null）が入るフィールド名。 */
   updatedFields: FundamentalField[];
 }
@@ -41,19 +41,23 @@ export interface FundamentalsUpdateResult {
  * computed が null（API が返せない）の指標は既存の手入力値を維持する（非破壊）。
  */
 export function planFundamentalsUpdate(stock: Stock, f: Fundamentals): FundamentalsUpdatePlan {
-  const updates: Pick<Stock, FundamentalField> = {
-    per: f.per ?? stock.per,
-    pbr: f.pbr ?? stock.pbr,
-    roe: f.roe ?? stock.roe,
-    operating_margin: f.operatingMargin ?? stock.operating_margin,
-    sales_growth: f.salesGrowth ?? stock.sales_growth,
-  };
   const updatedFields: FundamentalField[] = [];
   if (f.per != null) updatedFields.push("per");
   if (f.pbr != null) updatedFields.push("pbr");
   if (f.roe != null) updatedFields.push("roe");
   if (f.operatingMargin != null) updatedFields.push("operating_margin");
   if (f.salesGrowth != null) updatedFields.push("sales_growth");
+
+  const updates: Pick<Stock, FundamentalField | "fundamentals_updated_at"> = {
+    per: f.per ?? stock.per,
+    pbr: f.pbr ?? stock.pbr,
+    roe: f.roe ?? stock.roe,
+    operating_margin: f.operatingMargin ?? stock.operating_margin,
+    sales_growth: f.salesGrowth ?? stock.sales_growth,
+    // 新値が入る場合のみ自動取得日（開示日）を更新。無変更なら既存を維持（非破壊）。
+    fundamentals_updated_at:
+      updatedFields.length > 0 ? f.asOf ?? stock.fundamentals_updated_at : stock.fundamentals_updated_at,
+  };
   return { code: stock.code, updates, updatedFields };
 }
 
