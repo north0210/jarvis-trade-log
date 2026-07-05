@@ -43,6 +43,7 @@ const EXPECTED_KEYS = [
   "jarvis-trade-log:jquants-status",
   "jarvis-trade-log:jquants-token-cache",
   "jarvis-trade-log:lastBackup",
+  "jarvis-trade-log:market-universe",
   "jarvis-trade-log:notification-history",
   "jarvis-trade-log:notification-retention",
   "jarvis-trade-log:notification-settings",
@@ -56,6 +57,7 @@ const EXPECTED_KEYS = [
   "jarvis-trade-log:release-checklist",
   "jarvis-trade-log:report-snapshots",
   "jarvis-trade-log:rule-improvements",
+  "jarvis-trade-log:screener-snapshot",
   "jarvis-trade-log:settings",
   "jarvis-trade-log:simulations",
   "jarvis-trade-log:stock-bt-results",
@@ -76,16 +78,16 @@ describe("KEY_REGISTRY: キー集合のスナップショット固定", () => {
     expect(actual).toEqual(EXPECTED_KEYS);
   });
 
-  it("エントリ総数 = 46（具体キー45 + 動的プレフィックス1）", () => {
-    expect(KEY_REGISTRY.length).toBe(46);
-    expect(EXPECTED_KEYS.length).toBe(46);
+  it("エントリ総数 = 48（具体キー47 + 動的プレフィックス1）", () => {
+    expect(KEY_REGISTRY.length).toBe(48);
+    expect(EXPECTED_KEYS.length).toBe(48);
   });
 
   it("動的プレフィックスは price-cache: のみ（それ以外は具体キー）", () => {
     const prefixEntries = KEY_REGISTRY.map((k) => k.storageKey).filter((k) => k.endsWith(":"));
     expect(prefixEntries).toEqual([PRICE_CACHE_PREFIX]);
-    // 具体キー数 = 45
-    expect(KEY_REGISTRY.length - prefixEntries.length).toBe(45);
+    // 具体キー数 = 47
+    expect(KEY_REGISTRY.length - prefixEntries.length).toBe(47);
   });
 });
 
@@ -127,9 +129,9 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
     }
   });
 
-  it("K は全キー（refName ベース・46エントリ）を収録", () => {
+  it("K は全キー（refName ベース・48エントリ）を収録", () => {
     expect(Object.keys(K).length).toBe(KEY_REGISTRY.length);
-    expect(Object.keys(K).length).toBe(46);
+    expect(Object.keys(K).length).toBe(48);
   });
 
   it("K の全値が jarvis-trade-log: プレフィックスを持つ", () => {
@@ -241,6 +243,11 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
   it("K が onboarding-done（後追い登録キー）を正しく指す（6-1 変換対象）", () => {
     expect(K.onboardingDone).toBe("jarvis-trade-log:onboarding-done");
   });
+
+  it("K がスクリーナー新キー（regenerable）を正しく指す", () => {
+    expect(K.marketUniverse).toBe("jarvis-trade-log:market-universe");
+    expect(K.screenerSnapshot).toBe("jarvis-trade-log:screener-snapshot");
+  });
 });
 
 describe("refName（A-1: 参照識別子）の固定化", () => {
@@ -273,6 +280,8 @@ describe("refName（A-1: 参照識別子）の固定化", () => {
       "jarvis-trade-log:price-cache:": "priceCache",
       "jarvis-trade-log:price-update-log": "priceUpdateLog",
       "jarvis-trade-log:onboarding-done": "onboardingDone",
+      "jarvis-trade-log:market-universe": "marketUniverse",
+      "jarvis-trade-log:screener-snapshot": "screenerSnapshot",
     };
     const excluded = KEY_REGISTRY.filter((k) => !k.backupKey);
     // 除外キーの集合が期待どおり（過不足なし）
