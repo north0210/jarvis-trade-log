@@ -7,8 +7,9 @@
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { K } from "@/lib/storage/keys";
 
-const KEY = "jarvis-trade-log:onboarding-done";
+const KEY = K.onboardingDone;
 
 const STEPS: { icon: string; title: string; desc: string; href: string }[] = [
   { icon: "🛰", title: "ダッシュボード", desc: "総資産・リスク・通知・Advisor・出来高を一覧で確認します。", href: "/" },

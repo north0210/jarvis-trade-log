@@ -125,6 +125,7 @@ const RAW_KEY_REGISTRY: Omit<KeyDef, "refName">[] = [
   { storageKey: "jarvis-trade-log:jquants-token-cache", label: "J-Quants認証トークン", kind: "value", unit: "settings", includeInBackup: false, excludeReason: "security" },
   { storageKey: "jarvis-trade-log:price-cache:", label: "価格系列キャッシュ（動的プレフィックス）", kind: "value", unit: "settings", includeInBackup: false, excludeReason: "regenerable", note: "実キーは price-cache:<code>:<from>:<to>。再取得可・大容量。" },
   { storageKey: "jarvis-trade-log:price-update-log", label: "価格更新ログ", kind: "array", unit: "settings", includeInBackup: false, excludeReason: "transient" },
+  { storageKey: "jarvis-trade-log:onboarding-done", label: "オンボーディング完了フラグ", kind: "value", unit: "settings", includeInBackup: false, excludeReason: "transient", note: "初回ガイド表示済みフラグ。喪失時は再表示されるのみ（regenerable相当のUI状態）。" },
 ];
 
 /**

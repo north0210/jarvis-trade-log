@@ -46,6 +46,7 @@ const EXPECTED_KEYS = [
   "jarvis-trade-log:notification-history",
   "jarvis-trade-log:notification-retention",
   "jarvis-trade-log:notification-settings",
+  "jarvis-trade-log:onboarding-done",
   "jarvis-trade-log:performance-mode",
   "jarvis-trade-log:price-cache:",
   "jarvis-trade-log:price-provider-mode",
@@ -75,16 +76,16 @@ describe("KEY_REGISTRY: キー集合のスナップショット固定", () => {
     expect(actual).toEqual(EXPECTED_KEYS);
   });
 
-  it("エントリ総数 = 45（具体キー44 + 動的プレフィックス1）", () => {
-    expect(KEY_REGISTRY.length).toBe(45);
-    expect(EXPECTED_KEYS.length).toBe(45);
+  it("エントリ総数 = 46（具体キー45 + 動的プレフィックス1）", () => {
+    expect(KEY_REGISTRY.length).toBe(46);
+    expect(EXPECTED_KEYS.length).toBe(46);
   });
 
   it("動的プレフィックスは price-cache: のみ（それ以外は具体キー）", () => {
     const prefixEntries = KEY_REGISTRY.map((k) => k.storageKey).filter((k) => k.endsWith(":"));
     expect(prefixEntries).toEqual([PRICE_CACHE_PREFIX]);
-    // 具体キー数 = 44
-    expect(KEY_REGISTRY.length - prefixEntries.length).toBe(44);
+    // 具体キー数 = 45
+    expect(KEY_REGISTRY.length - prefixEntries.length).toBe(45);
   });
 });
 
@@ -126,9 +127,9 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
     }
   });
 
-  it("K は全キー（refName ベース・45エントリ）を収録", () => {
+  it("K は全キー（refName ベース・46エントリ）を収録", () => {
     expect(Object.keys(K).length).toBe(KEY_REGISTRY.length);
-    expect(Object.keys(K).length).toBe(45);
+    expect(Object.keys(K).length).toBe(46);
   });
 
   it("K の全値が jarvis-trade-log: プレフィックスを持つ", () => {
@@ -236,6 +237,10 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
     expect(K.backupGenerations).toBe("jarvis-trade-log:backup-generations");
     expect(K.lastBackup).toBe("jarvis-trade-log:lastBackup");
   });
+
+  it("K が onboarding-done（後追い登録キー）を正しく指す（6-1 変換対象）", () => {
+    expect(K.onboardingDone).toBe("jarvis-trade-log:onboarding-done");
+  });
 });
 
 describe("refName（A-1: 参照識別子）の固定化", () => {
@@ -267,6 +272,7 @@ describe("refName（A-1: 参照識別子）の固定化", () => {
       "jarvis-trade-log:jquants-token-cache": "jquantsTokenCache",
       "jarvis-trade-log:price-cache:": "priceCache",
       "jarvis-trade-log:price-update-log": "priceUpdateLog",
+      "jarvis-trade-log:onboarding-done": "onboardingDone",
     };
     const excluded = KEY_REGISTRY.filter((k) => !k.backupKey);
     // 除外キーの集合が期待どおり（過不足なし）

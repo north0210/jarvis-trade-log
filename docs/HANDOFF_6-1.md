@@ -1,7 +1,34 @@
 # ハンドオフ：任意6-1「キー参照化＋整合テスト」
 
-> 本ドキュメントは 6-1 の**承認済み方針**と**着手前の品質状態**を記録するもの。
-> 実装はまだ行っていない（次セッションはここから開始してよい）。
+> **✅ 完了（2026-07-05）** — 本方針に沿って実装済み。完了サマリーは末尾「## 完了記録」を参照。
+> 以下の「承認済み方針」「着手前の品質状態」は着手時点の記録として保持する。
+
+## 完了記録（2026-07-05）
+
+**結果**: 全 localStorage キーの参照を中央レジストリ由来の名前付き定数 `K` に一元化。**実コードのキー文字列リテラル 0 件**（keys.ts 定義部とテスト期待値を除く）を達成。
+
+### 成果サマリー
+- **レジストリ**: `KEY_REGISTRY` に `refName`（安定識別子）を追加（A-1）。`backupKey` があればそれ、無ければ storageKey サフィックスの camelCase を**機械導出**。`K` は全エントリを refName から純粋導出（キー文字列リテラルは keys.ts のレジストリ1箇所のみ）。
+- **後追い登録**: 棚卸し漏れの実キー `onboarding-done` を発見し、`includeInBackup:false / excludeReason:"transient"` で登録 → `K.onboardingDone` に変換。レジストリ総数 **45 → 46**（具体キー45 + 動的プレフィックス `price-cache:` 1）。
+- **不変条件の遵守**: キー文字列は全て不変（リネーム・データ移行なし）。`includeInBackup`/`excludeReason` は無変更。バックアップ対象36キーは不変（backup-items/roundtrip テストで担保）。後方互換ロジック（`advisor-ai-mode`）・動的プレフィックス（`price-cache:` 末尾コロン込み）・機構本体（`BACKUP_ITEMS` 導出）は無変更。
+- **セキュリティ**: jquants 系3キー（settings/status/token-cache）がバックアップに含まれないことを**負のアサーション**で固定。
+- **循環参照**: `keys.ts` は leaf（import ゼロ）。`K` 参照追加は既存の依存方向（consumer → keys）を維持し循環なし。
+
+### テスト
+- `keys.test.ts` を新規追加（整合テスト）。スナップショット固定・プレフィックス検証・重複なし・refName 固定化・quirk 明示（`K.notifications`→notification-history / `K.watchlistEvents`→watchlist-detections）・動的合成健全性・セキュリティ除外。
+- 件数推移: **43 → 82**（Vitest 4ファイル・全通過）。build / lint も green。
+
+### refName の quirk（将来の読み手向け）
+- `K.notifications` = `notification-history`（backupKey 由来）
+- `K.watchlistEvents` = `watchlist-detections`（backupKey 由来）
+- `K.priceCache` = `price-cache:`（**末尾コロン込み**の動的プレフィックス。`K.priceCache + code` で実キー生成）
+
+### 残課題（6-1 範囲外・任意）
+6-2 `advisor-ai-mode` 旧キー廃止 / 6-3 `@supabase` 依存除去 / その他は下記「未対応の任意項目」参照。
+
+---
+
+> 以下は**着手時点**の記録（承認済み方針・着手前品質状態）。
 
 ## 承認済み方針（変更不可の前提）
 
