@@ -182,6 +182,14 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
     expect(K.backtestV2).toBe("jarvis-trade-log:backtest-v2-results");
     expect(K.releaseChecklist).toBe("jarvis-trade-log:release-checklist");
   });
+
+  it("K が要注意帯①の除外キーを正しく指す（6-1 変換対象）", () => {
+    expect(K.priceUpdateLog).toBe("jarvis-trade-log:price-update-log");
+  });
+
+  it("K が要注意帯②を正しく指す（6-1 変換対象）", () => {
+    expect(K.primaryStrategy).toBe("jarvis-trade-log:primary-strategy");
+  });
 });
 
 describe("refName（A-1: 参照識別子）の固定化", () => {

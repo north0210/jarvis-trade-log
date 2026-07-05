@@ -4,7 +4,7 @@
  * 初回は初期テンプレートを投入する（ensureSeeded）。
  */
 import type { Strategy } from "@/lib/types";
-import { STORAGE_KEYS } from "./keys";
+import { STORAGE_KEYS, K } from "./keys";
 
 export type StrategyInput = Omit<Strategy, "id" | "createdAt">;
 
@@ -17,7 +17,7 @@ export interface StrategyRepository {
 }
 
 const STORAGE_KEY = STORAGE_KEYS.strategies;
-const PRIMARY_KEY = "jarvis-trade-log:primary-strategy";
+const PRIMARY_KEY = K.primaryStrategy;
 
 /** 初期テンプレート（数値 null = 判定しない）。 */
 const SEED: StrategyInput[] = [

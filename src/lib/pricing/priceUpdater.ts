@@ -16,8 +16,9 @@ import { computeVolumeMetrics } from "@/lib/indicators/volume";
 import { computeMacdState } from "@/lib/indicators/macd";
 import { getProviderMode, getJQuantsCredentials, setJQuantsStatus } from "./settings";
 import { fetchJQuantsQuotes } from "./jquantsClient";
+import { K } from "@/lib/storage/keys";
 
-const LOG_KEY = "jarvis-trade-log:price-update-log";
+const LOG_KEY = K.priceUpdateLog;
 const MAX_LOG = 20;
 
 export interface PriceUpdateLog {
