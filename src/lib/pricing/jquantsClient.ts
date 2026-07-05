@@ -8,6 +8,7 @@
  */
 import type { JQuantsCredentials } from "./provider";
 import { getCachedSeries, setCachedSeries, type SeriesPoint } from "@/lib/analytics/priceCache";
+import type { V2FinRecord } from "./jquantsV2";
 
 export interface JQuantsQuote {
   code: string;
@@ -29,6 +30,7 @@ export interface JQuantsResponse {
   message?: string;
   quotes?: JQuantsQuote[];
   series?: SeriesPoint[];
+  fins?: V2FinRecord[];
 }
 
 export interface SeriesResult {
@@ -69,6 +71,14 @@ export async function fetchJQuantsQuotes(
   credentials: JQuantsCredentials | null
 ): Promise<JQuantsResponse> {
   return callApi({ action: "quotes", codes, apiKey: apiKeyOf(credentials) });
+}
+
+/** 銘柄の財務情報（/fins/summary 生レコード）を取得する（V2・APIキー）。 */
+export async function fetchJQuantsFins(
+  code: string,
+  credentials: JQuantsCredentials | null
+): Promise<JQuantsResponse> {
+  return callApi({ action: "fins", code, apiKey: apiKeyOf(credentials) });
 }
 
 /** 期間指定の日足系列を取得（キャッシュ優先）。 */

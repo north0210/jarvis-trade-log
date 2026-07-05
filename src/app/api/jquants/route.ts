@@ -23,12 +23,14 @@
 import { NextResponse } from "next/server";
 import {
   buildDailyBarsUrl,
+  buildFinsUrl,
   mapDailyBars,
   deriveQuote,
   resolveApiKey,
   parseSubscriptionRange,
   clampToCoverage,
   type V2DailyBar,
+  type V2FinRecord,
   type InternalBar,
 } from "@/lib/pricing/jquantsV2";
 
@@ -133,6 +135,28 @@ async function collectBars(apiKey: string, code: string, reqFrom: string, reqTo:
   return { status: 400, bars: [] };
 }
 
+/** 財務情報を取得する（code 指定・pagination 対応）。 */
+async function fetchFins(
+  apiKey: string,
+  code: string
+): Promise<{ status: number; records: V2FinRecord[]; detail?: string }> {
+  const raw: V2FinRecord[] = [];
+  let key: string | undefined;
+  let guard = 0;
+  do {
+    const res = await fetch(buildFinsUrl({ code, paginationKey: key }), { headers: authHeaders(apiKey) });
+    if (!res.ok) {
+      const detail = await upstreamErrorDetail(res);
+      return { status: res.status, records: [], detail };
+    }
+    const data = (await res.json()) as { data?: V2FinRecord[]; pagination_key?: string };
+    if (Array.isArray(data.data)) raw.push(...data.data);
+    key = data.pagination_key;
+    guard++;
+  } while (key && guard < 50); // 安全弁
+  return { status: 200, records: raw };
+}
+
 export async function POST(req: Request) {
   let body: RequestBody = {};
   try {
@@ -141,7 +165,13 @@ export async function POST(req: Request) {
     body = {};
   }
   const action =
-    body.action === "quotes" ? "quotes" : body.action === "series" ? "series" : "test";
+    body.action === "quotes"
+      ? "quotes"
+      : body.action === "series"
+      ? "series"
+      : body.action === "fins"
+      ? "fins"
+      : "test";
   const { key: apiKey, source: keySource } = resolveApiKey(process.env.JQUANTS_API_KEY, body.apiKey);
 
   if (!apiKey) {
@@ -181,6 +211,17 @@ export async function POST(req: Request) {
       if (r.status === 401 || r.status === 403) return authFail(r.status, r.detail ?? "");
       if (r.status === 429) return rateFail();
       return otherFail(r.status, r.detail ?? "", "接続失敗");
+    }
+
+    // 財務情報（code 指定・日付レンジ非依存のため価格のようなクランプは不要）。
+    if (action === "fins") {
+      const code = typeof body.code === "string" ? body.code : "";
+      if (!code) return NextResponse.json({ ok: false, status: "error", message: "code が必要です" });
+      const r = await fetchFins(apiKey, code);
+      if (r.status === 401 || r.status === 403) return authFail(r.status, r.detail ?? "");
+      if (r.status === 429) return rateFail();
+      if (r.status !== 200) return otherFail(r.status, r.detail ?? "", `財務取得に失敗しました (${code})`);
+      return NextResponse.json({ ok: true, status: "connected", fins: r.records });
     }
 
     const to = typeof body.to === "string" ? body.to : fmtDate(new Date());

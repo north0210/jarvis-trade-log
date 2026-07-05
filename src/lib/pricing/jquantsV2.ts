@@ -13,6 +13,7 @@
 
 export const JQUANTS_V2_BASE = "https://api.jquants.com/v2";
 export const DAILY_BARS_PATH = "/equities/bars/daily";
+export const FINS_SUMMARY_PATH = "/fins/summary";
 
 /** V2 株価四本値の 1 レコード（使用フィールドのみ。他は無視）。 */
 export interface V2DailyBar {
@@ -162,6 +163,36 @@ export function clampToCoverage(
   const newTo = coverageEnd.slice(0, 10);
   const newFrom = msToDate(dateToMs(coverageEnd) - widthMs);
   return { from: newFrom, to: newTo, clamped: true };
+}
+
+/**
+ * V2 財務情報（/fins/summary）の 1 レコード（生ワイヤ型）。
+ * ※ 数値項目も **文字列で返り、空欄は空文字 ""**（fundamentals.ts でパースする）。
+ */
+export interface V2FinRecord {
+  DiscDate?: string; // 開示日 YYYY-MM-DD
+  Code?: string; // 5桁
+  DocType?: string; // 例 "3QFinancialStatements_Consolidated_IFRS"
+  CurPerType?: string; // 1Q/2Q/3Q/4Q/5Q/FY
+  CurPerSt?: string; // 会計期間開始
+  CurPerEn?: string; // 会計期間終了
+  Sales?: string; // 売上高
+  OP?: string; // 営業利益
+  OdP?: string; // 経常利益（IFRS/米国基準は空）
+  NP?: string; // 当期純利益
+  TA?: string; // 総資産
+  Eq?: string; // 純資産
+  EPS?: string; // 一株当たり当期純利益
+  BPS?: string; // 一株当たり純資産
+  ShOutFY?: string; // 期末発行済株式数
+}
+
+/** 財務情報の取得 URL を組み立てる（code 指定・pagination_key 任意）。 */
+export function buildFinsUrl(params: { code: string; paginationKey?: string }): string {
+  const q = new URLSearchParams();
+  q.set("code", toJQuantsCode(params.code));
+  if (params.paginationKey) q.set("pagination_key", params.paginationKey);
+  return `${JQUANTS_V2_BASE}${FINS_SUMMARY_PATH}?${q.toString()}`;
 }
 
 /** 日足バーの取得 URL を組み立てる（pagination_key 任意）。 */

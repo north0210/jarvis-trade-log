@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { testJQuantsConnection, fetchJQuantsQuotes, fetchJQuantsSeries } from "./jquantsClient";
+import { testJQuantsConnection, fetchJQuantsQuotes, fetchJQuantsSeries, fetchJQuantsFins } from "./jquantsClient";
 
 // ※ APIキーはダミー値のみ。実 fetch はモック。
 const DUMMY_KEY = "dummy-client-key";
@@ -53,6 +53,20 @@ describe("fetchJQuantsQuotes", () => {
     await fetchJQuantsQuotes(["7203"], null);
     const body = lastBody(fn);
     expect(body.apiKey).toBeUndefined();
+  });
+});
+
+describe("fetchJQuantsFins", () => {
+  it("action=fins・code・apiKey を送り、fins レコードを返す", async () => {
+    const fins = [{ Code: "72030", DocType: "FYFinancialStatements_Consolidated_IFRS", CurPerType: "FY", CurPerEn: "2026-03-31", Sales: "1200", EPS: "150", BPS: "1500" }];
+    const fn = mockFetchOnce({ ok: true, status: "connected", fins });
+    const res = await fetchJQuantsFins("7203", { apiKey: DUMMY_KEY });
+    expect(res.ok).toBe(true);
+    expect(res.fins).toEqual(fins);
+    const body = lastBody(fn);
+    expect(body.action).toBe("fins");
+    expect(body.code).toBe("7203");
+    expect(body.apiKey).toBe(DUMMY_KEY);
   });
 });
 
