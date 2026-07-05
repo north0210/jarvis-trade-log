@@ -4,6 +4,7 @@
  */
 import type { StrategyRankingRow, StrategyRankingSnapshot } from "@/lib/types";
 import type { StrategyBatchResult } from "./strategy-batch";
+import { K } from "@/lib/storage/keys";
 
 const mean = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
 
@@ -56,7 +57,7 @@ export function buildRankingSnapshot(
 }
 
 // ---- Repository ----
-const KEY = "jarvis-trade-log:strategy-ranking-snapshots";
+const KEY = K.strategyRankingSnapshots;
 
 export interface StrategyRankingSnapshotRepository {
   readonly name: string;

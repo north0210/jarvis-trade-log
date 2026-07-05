@@ -6,6 +6,7 @@
 import type { Strategy, Trade } from "@/lib/types";
 import type { StrategyInput } from "@/lib/storage/strategyRepository";
 import { analyzeTrades } from "@/lib/analysis/trades";
+import { K } from "@/lib/storage/keys";
 
 export type Confidence = "low" | "medium" | "high";
 
@@ -151,7 +152,7 @@ export function improverComments(improvements: Improvement[], trades: Trade[]): 
 }
 
 // ---- 却下（非表示）永続化 ----
-const KEY = "jarvis-trade-log:rule-improvements";
+const KEY = K.ruleImprovements;
 
 interface Store {
   dismissed: string[];

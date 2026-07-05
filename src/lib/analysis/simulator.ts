@@ -5,6 +5,7 @@
  */
 import type { Holding, Stock } from "@/lib/types";
 import { analyzePortfolio, type PortfolioAnalysis } from "./portfolio";
+import { K } from "@/lib/storage/keys";
 
 export type SimAction = "buy" | "add" | "sellPartial" | "sellAll";
 
@@ -113,7 +114,7 @@ export function simulationComment(
 }
 
 // ---- シミュレーション履歴（localStorage） ----
-const KEY = "jarvis-trade-log:simulations";
+const KEY = K.simulations;
 const MAX = 30;
 
 export interface SimSummary {

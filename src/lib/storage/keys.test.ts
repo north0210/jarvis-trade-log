@@ -151,6 +151,13 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
   it("K.performanceMode が performance-mode 実キーを指す（6-1 変換対象）", () => {
     expect(K.performanceMode).toBe("jarvis-trade-log:performance-mode");
   });
+
+  it("K が Batch1 の4キーを正しく指す（6-1 変換対象）", () => {
+    expect(K.simulations).toBe("jarvis-trade-log:simulations");
+    expect(K.ruleImprovements).toBe("jarvis-trade-log:rule-improvements");
+    expect(K.reportSnapshots).toBe("jarvis-trade-log:report-snapshots");
+    expect(K.strategyRankingSnapshots).toBe("jarvis-trade-log:strategy-ranking-snapshots");
+  });
 });
 
 describe("STORAGE_KEYS（レガシー）との整合", () => {

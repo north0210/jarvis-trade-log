@@ -16,6 +16,7 @@ import { analyzeByStrategy } from "@/lib/analysis/strategyPerf";
 import { getBacktestSummaries } from "@/lib/analytics/backtest-engine";
 import { computeMarketRadar } from "@/lib/market/market-radar";
 import { computeSectorHeatmap } from "@/lib/market/sector-heatmap";
+import { K } from "@/lib/storage/keys";
 
 export type SnapshotFields = Omit<ReportSnapshot, "id" | "date" | "period" | "createdAt">;
 
@@ -84,7 +85,7 @@ export function computeSnapshotFields(
 }
 
 // ---- Repository ----
-const KEY = "jarvis-trade-log:report-snapshots";
+const KEY = K.reportSnapshots;
 export type SnapshotInput = Omit<ReportSnapshot, "id" | "createdAt">;
 
 export interface ReportSnapshotRepository {
