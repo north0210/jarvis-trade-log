@@ -123,3 +123,23 @@ export const KEY_REGISTRY: KeyDef[] = [
 
 /** バックアップ対象（includeInBackup=true）のみ。backup-service.ts が導出に使用。 */
 export const BACKUP_KEY_DEFS: KeyDef[] = KEY_REGISTRY.filter((k) => k.includeInBackup);
+
+// ---- 名前付きキー定数（6-1: 参照一元化） ----
+
+/**
+ * 用途別の名前付きキー定数。各モジュールはリテラルの代わりにここを参照する。
+ *
+ * 設計方針（6-1）:
+ * - **KEY_REGISTRY から純粋導出**。キー文字列（storageKey）のリテラルはここに一切書かない。
+ *   レジストリが唯一の定義源であり、二重定義（＝リネーム時のデータ消失リスク）を再発させない。
+ * - プロパティ名は各エントリの `backupKey`（キャメルケース識別子）。
+ *   `backupKey` を持つキー（includeInBackup=true）のみを収録する。
+ * - 参照の正しさ（K の値 = レジストリの storageKey）は keys.test.ts の整合テストで保証する。
+ *
+ * 例: `K.tvEnabled` === "jarvis-trade-log:tv-enabled"
+ */
+export const K: Readonly<Record<string, string>> = Object.freeze(
+  Object.fromEntries(
+    KEY_REGISTRY.filter((k) => k.backupKey).map((k) => [k.backupKey as string, k.storageKey]),
+  ),
+);

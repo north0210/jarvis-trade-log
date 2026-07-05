@@ -2,9 +2,12 @@
  * Phase 49（最適化）: パフォーマンスモード設定（完全ローカル）。
  * モンテカルロ等の計算負荷を Fast / Normal / Research で切替え、体感速度を調整する。
  * Dashboard 埋め込みMC（ホットパス）と、分析ページの本格MCで別々の回数を用いる。
+ *
+ * キー文字列は中央レジストリ（storage/keys.ts）の名前付き定数 K を参照する（6-1）。
  */
+import { K } from "@/lib/storage/keys";
 
-const KEY = "jarvis-trade-log:performance-mode";
+const KEY = K.performanceMode;
 
 export type PerformanceMode = "fast" | "normal" | "research";
 export type LoadLevel = "low" | "medium" | "high";

@@ -5,9 +5,11 @@
  *   key: jarvis-trade-log:tv-enabled  （既定 ON）
  *
  * ※ 分析ロジック（alerts.ts / score.ts / repository / types.ts）には一切依存しない。
- *    Repository 層を変更しないため、キーはここで独立管理する。
+ *    キー文字列は中央レジストリ（storage/keys.ts）の名前付き定数 K を参照する（6-1）。
  */
-const TV_ENABLED_KEY = "jarvis-trade-log:tv-enabled";
+import { K } from "@/lib/storage/keys";
+
+const TV_ENABLED_KEY = K.tvEnabled;
 
 /** TradingView 表示が有効か（未設定時は既定 ON）。 */
 export function isTradingViewEnabled(): boolean {
