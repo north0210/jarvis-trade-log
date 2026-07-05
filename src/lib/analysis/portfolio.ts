@@ -7,8 +7,9 @@
 import type { Holding, Stock } from "@/lib/types";
 import { scoreStock, type ScoreResult } from "@/lib/score";
 import { holdingDangerLevel, pnl } from "@/lib/alerts";
+import { K } from "@/lib/storage/keys";
 
-const CASH_KEY = "jarvis-trade-log:cash-position";
+const CASH_KEY = K.cashPosition;
 
 export function getCashPosition(): number {
   if (typeof window === "undefined") return 0;

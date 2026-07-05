@@ -13,8 +13,9 @@
  */
 import { updateAllPrices } from "./priceUpdater";
 import { getProviderMode } from "./settings";
+import { K } from "@/lib/storage/keys";
 
-const KEY = "jarvis-trade-log:auto-update-settings";
+const KEY = K.autoUpdateSettings;
 
 export const INTERVAL_OPTIONS = [15, 30, 60, 120] as const;
 

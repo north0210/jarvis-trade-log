@@ -4,8 +4,9 @@
  * 実質「合計100固定」で扱われる。types.ts は変更しない（本モジュールで型を保持）。
  */
 import { ADVISOR_WEIGHTS, type AdvisorWeights } from "@/lib/advisor/advisorTypes";
+import { K } from "@/lib/storage/keys";
 
-const KEY = "jarvis-trade-log:advisor-weights";
+const KEY = K.advisorWeights;
 
 export type PresetKey = "conservative" | "balanced" | "aggressive" | "dividend" | "growth" | "swing" | "shortTerm";
 

@@ -16,8 +16,9 @@ import { rankingComment, DISCLAIMER_LINE } from "@/lib/advisor/ranking";
 import { listFavorites, toggleFavorite } from "@/lib/advisor/favorites";
 import { CATEGORY_LABELS, type AdvisorCategory } from "@/lib/advisor/advisorTypes";
 import type { Stock } from "@/lib/types";
+import { K } from "@/lib/storage/keys";
 
-const SETTINGS_KEY = "jarvis-trade-log:ranking-settings";
+const SETTINGS_KEY = K.rankingSettings;
 
 type SortKey = "score" | "grade" | "pf" | "cagr" | "dd" | "winRate" | "expectedValue" | "rsi" | "per" | "roe" | "updated";
 type FilterKey = "all" | "fav" | "strongBuy" | "buyPlus" | "watchPlus" | "danger" | "jp" | "us" | "missing" | "bt" | "nobt" | "manual" | "auto";
