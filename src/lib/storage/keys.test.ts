@@ -216,6 +216,21 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
   it("K が要注意帯⑥(jquants-token-cache)を正しく指す（6-1 変換対象）", () => {
     expect(K.jquantsTokenCache).toBe("jarvis-trade-log:jquants-token-cache");
   });
+
+  it("K が要注意帯⑦(advisor-ai-settings 2キー)を正しく指す（6-1 変換対象）", () => {
+    expect(K.aiConfig).toBe("jarvis-trade-log:ai-config");
+    // advisorAiMode は ai-config 統合済みの旧キー（後方互換で残存・backup除外）。
+    expect(K.advisorAiMode).toBe("jarvis-trade-log:advisor-ai-mode");
+  });
+
+  it("K が要注意帯⑨(priceCache: 動的prefix + cache-policy)を正しく指す（6-1 変換対象）", () => {
+    expect(K.cachePolicy).toBe("jarvis-trade-log:cache-policy");
+    // ⚠️ price-cache は動的プレフィックス。末尾コロン込みで完全一致すること。
+    expect(K.priceCache).toBe("jarvis-trade-log:price-cache:");
+    // 動的合成の健全性: 実キー生成が従来リテラルと一致（コロン欠落等の回帰を検知）。
+    expect(K.priceCache + "7203").toBe("jarvis-trade-log:price-cache:7203");
+    expect(`${K.priceCache}9984`).toBe("jarvis-trade-log:price-cache:9984");
+  });
 });
 
 describe("refName（A-1: 参照識別子）の固定化", () => {

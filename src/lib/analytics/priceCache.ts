@@ -6,6 +6,8 @@
  *
  * ※ 大量銘柄・長期間で localStorage 容量が逼迫する場合は IndexedDB への移行を検討（将来）。
  */
+import { K } from "@/lib/storage/keys";
+
 export interface SeriesPoint {
   date: string;
   close: number | null;
@@ -23,8 +25,9 @@ interface CacheEntry {
   series: SeriesPoint[];
 }
 
-const PREFIX = "jarvis-trade-log:price-cache:";
-const POLICY_KEY = "jarvis-trade-log:cache-policy";
+// 動的プレフィックス（実キーは price-cache:<code>）。末尾コロン込みで登録済み。
+const PREFIX = K.priceCache;
+const POLICY_KEY = K.cachePolicy;
 
 export function getCachePolicy(): CachePolicy {
   if (typeof window === "undefined") return "90";

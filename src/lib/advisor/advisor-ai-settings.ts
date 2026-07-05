@@ -4,8 +4,11 @@
  * ニュース/RSS/外部情報は一切利用しない（銘柄内部データのみ）。判断補助・投資助言ではない。
  */
 
-const MODE_KEY = "jarvis-trade-log:advisor-ai-mode";
-const CONFIG_KEY = "jarvis-trade-log:ai-config";
+import { K } from "@/lib/storage/keys";
+
+// advisor-ai-mode は ai-config に統合済みの旧キー（後方互換で読み書き継続・backup除外）。
+const MODE_KEY = K.advisorAiMode;
+const CONFIG_KEY = K.aiConfig;
 
 export type AiMode = "off" | "template" | "openai" | "claude" | "gemini" | "local";
 export type CommentStyle = "conservative" | "balanced" | "aggressive";
