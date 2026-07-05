@@ -7,8 +7,9 @@
 import type { AdvisorReport } from "./advisorTypes";
 import type { RiskReport } from "@/lib/risk/risk-engine";
 import type { PortfolioAnalysis } from "@/lib/analysis/portfolio";
+import { K } from "@/lib/storage/keys";
 
-const KEY = "jarvis-trade-log:advisor-ai-comments";
+const KEY = K.aiComments;
 
 export const AI_COMMENT_DISCLAIMER = "外部AIコメントは参考情報です。売買判断はユーザー自身で行ってください。";
 

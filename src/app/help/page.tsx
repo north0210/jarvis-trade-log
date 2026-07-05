@@ -10,8 +10,9 @@ import Link from "next/link";
 import Disclaimer from "@/components/Disclaimer";
 import { APP_LABEL } from "@/lib/version";
 import { GLOSSARY } from "@/lib/help/glossary";
+import { K } from "@/lib/storage/keys";
 
-const CHECK_KEY = "jarvis-trade-log:help-checklist";
+const CHECK_KEY = K.helpChecklist;
 
 type CardTone = "info" | "warning" | "danger";
 interface HelpCard {

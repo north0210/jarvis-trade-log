@@ -5,8 +5,9 @@
  */
 import type { AdvisorCategory, AdvisorCounts, AdvisorReport, OverallGrade } from "./advisorTypes";
 import type { AdvisorWeights } from "./advisorTypes";
+import { K } from "@/lib/storage/keys";
 
-const KEY = "jarvis-trade-log:advisor-snapshots";
+const KEY = K.advisorSnapshots;
 const MAX = 60;
 
 export interface AdvisorSnapItem {

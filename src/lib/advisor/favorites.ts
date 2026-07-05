@@ -2,7 +2,9 @@
  * Phase 63 (v1.7.x): お気に入り銘柄（完全ローカル）。
  * 銘柄コードの集合を localStorage に保持（最大20件）。Dashboard の My Favorites 等で使用。
  */
-const KEY = "jarvis-trade-log:favorites";
+import { K } from "@/lib/storage/keys";
+
+const KEY = K.favorites;
 const MAX = 20;
 
 export function listFavorites(): string[] {

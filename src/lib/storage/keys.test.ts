@@ -172,6 +172,13 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
     expect(K.advisorWeights).toBe("jarvis-trade-log:advisor-weights");
     expect(K.rankingSettings).toBe("jarvis-trade-log:ranking-settings");
   });
+
+  it("K が Batch4 の4キーを正しく指す（6-1 変換対象）", () => {
+    expect(K.favorites).toBe("jarvis-trade-log:favorites");
+    expect(K.helpChecklist).toBe("jarvis-trade-log:help-checklist");
+    expect(K.advisorSnapshots).toBe("jarvis-trade-log:advisor-snapshots");
+    expect(K.aiComments).toBe("jarvis-trade-log:advisor-ai-comments");
+  });
 });
 
 describe("STORAGE_KEYS（レガシー）との整合", () => {
