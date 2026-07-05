@@ -41,6 +41,7 @@ import { CATEGORY_LABELS } from "@/lib/advisor/advisorTypes";
 import { listFavorites } from "@/lib/advisor/favorites";
 import ReleaseChecklist from "@/components/ReleaseChecklist";
 import Onboarding from "@/components/Onboarding";
+import ScreenerTop10Widget from "@/components/ScreenerTop10Widget";
 import AiComment from "@/components/AiComment";
 import { aiCommentCount } from "@/lib/advisor/ai-comment";
 import { latestStockBtResult, type StockBtResult } from "@/lib/advisor/stock-backtest";
@@ -557,6 +558,8 @@ export default function Dashboard() {
       <Onboarding />
 
       <ReleaseChecklist />
+
+      <ScreenerTop10Widget />
 
       {(() => {
         const dangerCats = new Set(["danger", "sellCandidate", "reduce"]);
