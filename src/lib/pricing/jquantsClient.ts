@@ -24,6 +24,8 @@ export interface JQuantsQuote {
 export interface JQuantsResponse {
   ok: boolean;
   status: "connected" | "error" | "unset";
+  /** 失敗理由（認証/レート制限）。bulk 更新の中断判定に使用。 */
+  reason?: "auth" | "rate";
   message?: string;
   quotes?: JQuantsQuote[];
   series?: SeriesPoint[];

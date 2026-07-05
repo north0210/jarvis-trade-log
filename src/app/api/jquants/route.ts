@@ -95,10 +95,10 @@ export async function POST(req: Request) {
         { headers: authHeaders(apiKey) }
       );
       if (res.status === 401 || res.status === 403) {
-        return NextResponse.json({ ok: false, status: "error", message: "APIキーが無効です（認証エラー）。" });
+        return NextResponse.json({ ok: false, status: "error", reason: "auth", message: "APIキーが無効です（認証エラー）。" });
       }
       if (res.status === 429) {
-        return NextResponse.json({ ok: false, status: "error", message: "レート制限に達しました。時間をおいて再試行してください。" });
+        return NextResponse.json({ ok: false, status: "error", reason: "rate", message: "レート制限に達しました。時間をおいて再試行してください。" });
       }
       if (!res.ok) {
         return NextResponse.json({ ok: false, status: "error", message: `接続失敗 (${res.status})` });
@@ -118,9 +118,9 @@ export async function POST(req: Request) {
       if (!code) return NextResponse.json({ ok: false, status: "error", message: "code が必要です" });
       const r = await fetchBars(apiKey, code, from, to);
       if (r.status === 401 || r.status === 403)
-        return NextResponse.json({ ok: false, status: "error", message: "APIキーが無効です（認証エラー）。" });
+        return NextResponse.json({ ok: false, status: "error", reason: "auth", message: "APIキーが無効です（認証エラー）。" });
       if (r.status === 429)
-        return NextResponse.json({ ok: false, status: "error", message: "レート制限に達しました。時間をおいて再試行してください。" });
+        return NextResponse.json({ ok: false, status: "error", reason: "rate", message: "レート制限に達しました。時間をおいて再試行してください。" });
       if (!r.bars)
         return NextResponse.json({ ok: false, status: "error", message: `系列取得に失敗しました (${code}: ${r.status})` });
       return NextResponse.json({ ok: true, status: "connected", series: r.bars });
@@ -139,10 +139,10 @@ export async function POST(req: Request) {
     for (const code of codes) {
       const r = await fetchBars(apiKey, code, from, to);
       if (r.status === 401 || r.status === 403) {
-        return NextResponse.json({ ok: false, status: "error", message: "APIキーが無効です（認証エラー）。" });
+        return NextResponse.json({ ok: false, status: "error", reason: "auth", message: "APIキーが無効です（認証エラー）。" });
       }
       if (r.status === 429) {
-        return NextResponse.json({ ok: false, status: "error", message: "レート制限に達しました。時間をおいて再試行してください。" });
+        return NextResponse.json({ ok: false, status: "error", reason: "rate", message: "レート制限に達しました。時間をおいて再試行してください。" });
       }
       if (!r.bars) continue; // その他の失敗銘柄はスキップ（部分成功を許容）
       const q = deriveQuote(code, r.bars);

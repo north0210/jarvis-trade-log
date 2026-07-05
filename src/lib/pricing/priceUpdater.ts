@@ -1,22 +1,19 @@
 /**
- * 一括価格更新サービス（手動）。
+ * 一括価格更新サービス。
  *
- * 登録銘柄を J-Quants（Route経由）から取得し、current_price / rsi を
- * StockRepository へ反映する。銘柄画面・設定画面の両ボタンから共用する。
+ * 登録銘柄を PriceProvider（JQuantsPriceProvider）経由で取得し、
+ * current_price / rsi / macd / 出来高を StockRepository へ反映する。
  *
- * ・失敗しても全体は止めない（銘柄単位でスキップ）
- * ・レート制限・認証失敗時は ManualPriceProvider の値を維持（更新しない）
- * ・更新結果を簡易ログ（localStorage）に記録する
- *
- * ※ 自動スケジュール実行は未実装（本サービスは明示操作時のみ呼ばれる）。
+ * ・取得・レート制限（5req/分）・進捗・中断は Provider 層に集約（本モジュールは薄いループ）。
+ * ・失敗しても全体は止めない（銘柄単位でスキップ・部分成功）。
+ * ・認証失敗・レート制限・ユーザー中断は途中で停止し、既更新分は保持する。
+ * ・更新結果を簡易ログ（localStorage）に記録する。
  */
 import { getStockRepository } from "@/lib/storage/stockRepository";
-import { calculateRSI } from "@/lib/indicators/rsi";
-import { computeVolumeMetrics } from "@/lib/indicators/volume";
-import { computeMacdState } from "@/lib/indicators/macd";
 import { getProviderMode, getJQuantsCredentials, setJQuantsStatus } from "./settings";
-import { fetchJQuantsQuotes } from "./jquantsClient";
+import { getPriceProvider, type FetchProgress, type BulkStop, type Quote } from "./provider";
 import { K } from "@/lib/storage/keys";
+import type { Stock } from "@/lib/types";
 
 const LOG_KEY = K.priceUpdateLog;
 const MAX_LOG = 20;
@@ -35,6 +32,12 @@ export interface BulkUpdateResult {
   rsiCount: number;
   message: string;
   at: string; // ISO datetime
+}
+
+/** 一括更新のオプション（進捗・中断）。 */
+export interface BulkUpdateOptions {
+  onProgress?: (p: FetchProgress) => void;
+  signal?: AbortSignal;
 }
 
 export function getUpdateLog(): PriceUpdateLog[] {
@@ -61,75 +64,80 @@ function appendLog(record: PriceUpdateLog): void {
   window.localStorage.setItem(LOG_KEY, JSON.stringify(log));
 }
 
-/** 全登録銘柄の価格・RSI を J-Quants から一括更新する。 */
-export async function updateAllPrices(): Promise<BulkUpdateResult> {
+/** 中断理由・件数から利用者向けメッセージを組み立てる。 */
+function messageFor(stopped: BulkStop | null, success: number, total: number, failed: number): string {
+  switch (stopped) {
+    case "aborted":
+      return `${success}/${total} 更新（ユーザー中断）`;
+    case "rate":
+      return `${success}/${total} 更新（レート制限で中断）`;
+    case "auth":
+      return "認証に失敗しました（APIキーを確認してください）。";
+    default:
+      return failed === 0 ? "価格更新が完了しました" : `${success}/${total} 更新（一部失敗）`;
+  }
+}
+
+/** Quote を Stock 更新値へ反映する（欠損は既存値を維持）。 */
+function applyQuote(rest: Omit<Stock, "id">, q: Quote): Omit<Stock, "id"> {
+  return {
+    ...rest,
+    current_price: q.price,
+    rsi: q.rsi ?? rest.rsi,
+    macd: q.macd && q.macd !== "不明" ? q.macd : rest.macd,
+    volume: q.volume ?? rest.volume,
+    relativeVolume: q.relativeVolume ?? rest.relativeVolume,
+    volumeTrend: q.volume != null ? q.volumeTrend ?? rest.volumeTrend : rest.volumeTrend,
+    price_updated_at: q.asOf,
+  };
+}
+
+/** 全登録銘柄の価格・指標を J-Quants から一括更新する（進捗・中断対応）。 */
+export async function updateAllPrices(opts?: BulkUpdateOptions): Promise<BulkUpdateResult> {
   const at = new Date().toISOString();
   const repo = getStockRepository();
   const stocks = await repo.list();
 
   if (getProviderMode() !== "jquants-ready") {
-    return {
-      ok: false,
-      successCount: 0,
-      failedCount: 0,
-      rsiCount: 0,
-      message: "手入力モードです。設定画面で J-Quants モードに切り替えてください。",
-      at,
-    };
+    return { ok: false, successCount: 0, failedCount: 0, rsiCount: 0, message: "手入力モードです。設定画面で J-Quants モードに切り替えてください。", at };
   }
   if (stocks.length === 0) {
     return { ok: false, successCount: 0, failedCount: 0, rsiCount: 0, message: "対象銘柄がありません。", at };
   }
 
-  const res = await fetchJQuantsQuotes(stocks.map((s) => s.code), getJQuantsCredentials());
+  const provider = getPriceProvider(stocks, "jquants-ready", getJQuantsCredentials());
+  const result = await provider.fetchQuotesBulk(
+    stocks.map((s) => s.code),
+    { onProgress: opts?.onProgress, signal: opts?.signal }
+  );
 
-  setJQuantsStatus({
-    status: res.status,
-    at,
-    message: res.message ?? (res.ok ? "接続成功" : "接続失敗"),
-  });
-
-  // 認証失敗・通信失敗・レート制限 → 手入力値を維持（fallback）し、失敗として記録
-  if (!res.ok || !res.quotes) {
-    const message = res.message ?? "一部銘柄の更新に失敗しました";
-    appendLog({ date: at, successCount: 0, failedCount: stocks.length, message });
-    return { ok: false, successCount: 0, failedCount: stocks.length, rsiCount: 0, message, at };
-  }
-
-  // 取得結果を current_price / rsi へ反映（RSI 不足時は既存値を維持）
-  const byCode = new Map(res.quotes.map((q) => [q.code, q]));
+  // 取得できた銘柄を逐次反映（部分成功）。
+  const byCode = new Map(result.quotes.map((q) => [q.code, q]));
   let success = 0;
   let rsiCount = 0;
   for (const s of stocks) {
     const q = byCode.get(s.code);
-    if (q && q.current_price != null) {
-      const rsi = calculateRSI(q.closes ?? []);
-      if (rsi != null) rsiCount++;
-      const vm = computeVolumeMetrics(q.volumes ?? []);
-      const macd = computeMacdState(q.closes ?? []);
-      const { id, ...rest } = s;
-      await repo.update(id, {
-        ...rest,
-        current_price: q.current_price,
-        rsi: rsi ?? rest.rsi,
-        // MACD（系列から判定できた場合のみ更新）
-        macd: macd !== "不明" ? macd : rest.macd,
-        // 出来高指標（取得できた場合のみ更新）
-        volume: vm.volume ?? rest.volume,
-        relativeVolume: vm.relativeVolume ?? rest.relativeVolume,
-        volumeTrend: vm.volume != null ? vm.volumeTrend : rest.volumeTrend,
-        price_updated_at: q.date ?? at,
-      });
-      success++;
-    }
+    if (!q) continue;
+    if (q.rsi != null) rsiCount++;
+    const { id, ...rest } = s;
+    await repo.update(id, applyQuote(rest, q));
+    success++;
   }
   const failedCount = stocks.length - success;
-  const message = failedCount === 0 ? "価格更新が完了しました" : "一部銘柄の更新に失敗しました";
+  const message = messageFor(result.stopped, success, stocks.length, failedCount);
+
+  setJQuantsStatus({
+    status: result.stopped === "auth" ? "error" : "connected",
+    at,
+    message: result.stopped === "auth" ? "認証エラー" : "接続成功",
+  });
   appendLog({ date: at, successCount: success, failedCount, message });
-  return { ok: true, successCount: success, failedCount, rsiCount, message, at };
+
+  const ok = result.stopped === null && failedCount === 0;
+  return { ok, successCount: success, failedCount, rsiCount, message, at };
 }
 
-/** 個別銘柄の価格・RSI・MACD・出来高を J-Quants から更新する。 */
+/** 個別銘柄の価格・指標を J-Quants から更新する。 */
 export async function updateStockPrice(id: string): Promise<{ ok: boolean; message: string }> {
   const repo = getStockRepository();
   const stocks = await repo.list();
@@ -138,26 +146,28 @@ export async function updateStockPrice(id: string): Promise<{ ok: boolean; messa
   if (getProviderMode() !== "jquants-ready") return { ok: false, message: "手入力モードです（設定でJ-Quantsへ切替）。" };
 
   const at = new Date().toISOString();
-  const res = await fetchJQuantsQuotes([s.code], getJQuantsCredentials());
-  setJQuantsStatus({ status: res.status, at, message: res.message ?? (res.ok ? "接続成功" : "接続失敗") });
-  if (!res.ok || !res.quotes) return { ok: false, message: res.message ?? "取得に失敗しました。" };
-  const q = res.quotes.find((x) => x.code === s.code);
-  if (!q || q.current_price == null) return { ok: false, message: "価格データを取得できませんでした。" };
+  const provider = getPriceProvider(stocks, "jquants-ready", getJQuantsCredentials());
+  const result = await provider.fetchQuotesBulk([s.code]);
+  const q = result.quotes.find((x) => x.code === s.code);
 
-  const rsi = calculateRSI(q.closes ?? []);
-  const vm = computeVolumeMetrics(q.volumes ?? []);
-  const macd = computeMacdState(q.closes ?? []);
+  setJQuantsStatus({
+    status: result.stopped === "auth" ? "error" : q ? "connected" : "error",
+    at,
+    message: q ? "接続成功" : result.stopped === "auth" ? "認証エラー" : "取得失敗",
+  });
+
+  if (!q) {
+    const msg =
+      result.stopped === "auth"
+        ? "認証に失敗しました（APIキーを確認してください）。"
+        : result.stopped === "rate"
+        ? "レート制限に達しました。時間をおいて再試行してください。"
+        : "価格データを取得できませんでした。";
+    return { ok: false, message: msg };
+  }
+
   const { id: _id, ...rest } = s;
   void _id;
-  await repo.update(id, {
-    ...rest,
-    current_price: q.current_price,
-    rsi: rsi ?? rest.rsi,
-    macd: macd !== "不明" ? macd : rest.macd,
-    volume: vm.volume ?? rest.volume,
-    relativeVolume: vm.relativeVolume ?? rest.relativeVolume,
-    volumeTrend: vm.volume != null ? vm.volumeTrend : rest.volumeTrend,
-    price_updated_at: q.date ?? at,
-  });
+  await repo.update(id, applyQuote(rest, q));
   return { ok: true, message: `${s.name} を更新しました（価格/RSI/MACD/出来高）。ファンダ(PER/PBR/ROE等)は手入力です。` };
 }

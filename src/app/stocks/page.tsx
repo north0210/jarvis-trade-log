@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { getStockRepository, type StockInput } from "@/lib/storage/stockRepository";
 import type { MacdState, Stock, StockRank, StockStatus } from "@/lib/types";
 import { stockAlerts, type AlertLevel } from "@/lib/alerts";
@@ -62,6 +62,8 @@ export default function StocksPage() {
   const [tvEnabled, setTvEnabled] = useState(false);
   const [priceMsg, setPriceMsg] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [priceProgress, setPriceProgress] = useState<{ done: number; total: number } | null>(null);
+  const bulkAbortRef = useRef<AbortController | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [quickCode, setQuickCode] = useState("");
   const [quickName, setQuickName] = useState("");
@@ -180,10 +182,18 @@ export default function StocksPage() {
       setPriceMsg("現在は手入力モードです。価格は銘柄情報の「現在価格」を編集して更新してください。");
       return;
     }
+    const controller = new AbortController();
+    bulkAbortRef.current = controller;
     setUpdating(true);
+    setPriceProgress(null);
     setPriceMsg("価格データ取得中です、ボス…");
-    const r = await updateAllPrices();
+    const r = await updateAllPrices({
+      signal: controller.signal,
+      onProgress: (p) => setPriceProgress({ done: p.done, total: p.total }),
+    });
     setUpdating(false);
+    setPriceProgress(null);
+    bulkAbortRef.current = null;
     const rsiMsg = r.ok
       ? r.rsiCount > 0
         ? ` RSIを自動計算しました（${r.rsiCount}件）。`
@@ -304,11 +314,21 @@ export default function StocksPage() {
       <section className="hud-panel p-4 overflow-x-auto">
         <div className="flex items-center justify-between mb-3">
           <h2 className="hud-label">銘柄一覧 ({stocks.length})</h2>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <Link href="/advisor" className="hud-btn text-xs px-3 py-1">Advisorで再評価 →</Link>
             <button className="hud-btn text-xs px-3 py-1" onClick={updatePrices} disabled={updating}>
               {updating ? "更新中…" : "価格更新（一括）"}
             </button>
+            {updating && (
+              <>
+                {priceProgress && (
+                  <span className="text-arc text-xs">{priceProgress.done}/{priceProgress.total} 件</span>
+                )}
+                <button className="hud-btn text-xs px-3 py-1" onClick={() => bulkAbortRef.current?.abort()}>
+                  中断
+                </button>
+              </>
+            )}
           </div>
         </div>
         <p className="text-xs text-arcdim mb-3">価格更新で 現在値/RSI/MACD/相対出来高 を自動取得（J-Quantsモード）。PER/PBR/ROE/営業利益率/売上成長率 は手入力です（未取得は「データ不足」表示）。</p>

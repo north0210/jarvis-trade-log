@@ -118,6 +118,8 @@ export default function SettingsPage() {
   const [jqStatus, setJqStatus] = useState<JQuantsStatusRecord | null>(null);
   const [testing, setTesting] = useState(false);
   const [priceUpdating, setPriceUpdating] = useState(false);
+  const [priceProgress, setPriceProgress] = useState<{ done: number; total: number } | null>(null);
+  const bulkAbortRef = useRef<AbortController | null>(null);
   const [lastLog, setLastLog] = useState<PriceUpdateLog | null>(null);
   const [auto, setAuto] = useState<AutoUpdateSettings>({
     enabled: false,
@@ -346,10 +348,18 @@ export default function SettingsPage() {
   };
 
   const runBulkUpdate = async () => {
+    const controller = new AbortController();
+    bulkAbortRef.current = controller;
     setPriceUpdating(true);
+    setPriceProgress(null);
     setMsg({ tone: "ok", text: "価格データ取得中です、ボス…" });
-    const r = await updateAllPrices();
+    const r = await updateAllPrices({
+      signal: controller.signal,
+      onProgress: (p) => setPriceProgress({ done: p.done, total: p.total }),
+    });
     setPriceUpdating(false);
+    setPriceProgress(null);
+    bulkAbortRef.current = null;
     setLastLog(getLatestUpdateLog());
     setJqStatus(getJQuantsStatus());
     setMsg({
@@ -357,6 +367,8 @@ export default function SettingsPage() {
       text: `${r.message}（成功：${r.successCount}件 / 失敗：${r.failedCount}件）`,
     });
   };
+
+  const cancelBulkUpdate = () => bulkAbortRef.current?.abort();
 
   const saveProvider = () => {
     setProviderMode(mode);
@@ -683,9 +695,21 @@ export default function SettingsPage() {
         </div>
 
         <div className="mt-4 pt-3 border-t border-line/60">
-          <button className="hud-btn" onClick={runBulkUpdate} disabled={priceUpdating}>
-            {priceUpdating ? "更新中…" : "全銘柄価格更新"}
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button className="hud-btn" onClick={runBulkUpdate} disabled={priceUpdating}>
+              {priceUpdating ? "更新中…" : "全銘柄価格更新"}
+            </button>
+            {priceUpdating && (
+              <>
+                <button className="hud-btn" onClick={cancelBulkUpdate}>中断</button>
+                {priceProgress && (
+                  <span className="text-arc text-xs">
+                    {priceProgress.done}/{priceProgress.total} 件（5req/分で取得中）
+                  </span>
+                )}
+              </>
+            )}
+          </div>
           <p className="text-arcdim text-xs mt-2">
             登録銘柄の current_price / rsi を J-Quants から一括取得して反映します。
           </p>
