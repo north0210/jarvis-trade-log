@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapMasterRecord, buildUniverse, toAdjBar, assembleAdjSeries } from "./universe";
+import { mapMasterRecord, buildUniverse, toAdjBar, assembleAdjSeries, filterCommonStocks } from "./universe";
 import type { V2MasterRecord, V2DailyBar } from "@/lib/pricing/jquantsV2";
 
 function master(o: Partial<V2MasterRecord>): V2MasterRecord {
@@ -12,7 +12,7 @@ function bar(o: Partial<V2DailyBar>): V2DailyBar {
 describe("mapMasterRecord", () => {
   it("マスタ → UniverseEntry（業種名/市場名を採用）", () => {
     const e = mapMasterRecord(
-      master({ Code: "72030", CoName: "トヨタ自動車", CoNameEn: "TOYOTA", S17Nm: "自動車・輸送機", S33Nm: "輸送用機器", ScaleCat: "TOPIX Core30", MktNm: "プライム" })
+      master({ Code: "72030", CoName: "トヨタ自動車", CoNameEn: "TOYOTA", S17Nm: "自動車・輸送機", S33Nm: "輸送用機器", ScaleCat: "TOPIX Core30", MktNm: "プライム", Mkt: "0111", ProdCat: "011" })
     );
     expect(e).toEqual({
       code: "72030",
@@ -22,7 +22,26 @@ describe("mapMasterRecord", () => {
       sector33: "輸送用機器",
       scaleCategory: "TOPIX Core30",
       market: "プライム",
+      marketCode: "0111",
+      prodCategory: "011",
     });
+  });
+});
+
+describe("filterCommonStocks（個別株のみに絞り込み）", () => {
+  const u = [
+    mapMasterRecord(master({ Code: "72030", CoName: "トヨタ", Mkt: "0111", ProdCat: "011" })), // プライム個別株 ✓
+    mapMasterRecord(master({ Code: "99840", CoName: "SBG", Mkt: "0112", ProdCat: "011" })), // スタンダード個別株 ✓
+    mapMasterRecord(master({ Code: "13060", CoName: "TOPIX ETF", Mkt: "0111", ProdCat: "014" })), // ETF ✗
+    mapMasterRecord(master({ Code: "89510", CoName: "日本ビルF", Mkt: "0111", ProdCat: "013" })), // REIT ✗
+    mapMasterRecord(master({ Code: "10000", CoName: "PRO銘柄", Mkt: "0105", ProdCat: "011" })), // PRO Market ✗
+  ];
+  it("ProdCat=011 かつ 現行3市場のみ残す（ETF/REIT/PRO を除外）", () => {
+    expect(filterCommonStocks(u).map((x) => x.code)).toEqual(["72030", "99840"]);
+  });
+  it("opts で対象を差し替えできる（例: ETF も含める）", () => {
+    const r = filterCommonStocks(u, { prodCategories: ["011", "014"], markets: ["0111", "0112", "0113"] });
+    expect(r.map((x) => x.code).sort()).toEqual(["13060", "72030", "99840"]);
   });
 });
 

@@ -15,8 +15,15 @@ export interface UniverseEntry {
   sector17: string;
   sector33: string;
   scaleCategory: string;
-  market: string;
+  market: string; // MktNm（市場区分名・表示用）
+  marketCode: string; // Mkt（市場区分コード・絞り込み用）
+  prodCategory: string; // ProdCat（商品区分コード・絞り込み用）
 }
+
+/** 商品区分: 内国株券（個別株）。 */
+export const PRODCAT_COMMON_STOCK = "011";
+/** 現行の個別株3市場（プライム/スタンダード/グロース）。 */
+export const CURRENT_STOCK_MARKETS = ["0111", "0112", "0113"];
 
 /** 銘柄別の調整後日足（1点）。 */
 export interface AdjBar {
@@ -35,7 +42,24 @@ export function mapMasterRecord(raw: V2MasterRecord): UniverseEntry {
     sector33: raw.S33Nm ?? "",
     scaleCategory: raw.ScaleCat ?? "",
     market: raw.MktNm ?? "",
+    marketCode: raw.Mkt ?? "",
+    prodCategory: raw.ProdCat ?? "",
   };
+}
+
+/**
+ * 個別株（内国株券・現行3市場）だけに絞り込む。
+ * 既定: ProdCat="011"（内国株券）かつ Mkt∈{0111,0112,0113}。
+ * → ETF(014)/REIT(013)/優先出資(012)/外国(021-024)/PRO Market(0105) 等を除外する。
+ * 実測: /equities/master は約4450件（ETF等を含む）→ 本フィルタで個別株のみへ。
+ */
+export function filterCommonStocks(
+  universe: UniverseEntry[],
+  opts?: { prodCategories?: string[]; markets?: string[] }
+): UniverseEntry[] {
+  const pc = new Set(opts?.prodCategories ?? [PRODCAT_COMMON_STOCK]);
+  const mk = new Set(opts?.markets ?? CURRENT_STOCK_MARKETS);
+  return universe.filter((e) => pc.has(e.prodCategory) && mk.has(e.marketCode));
 }
 
 /**
