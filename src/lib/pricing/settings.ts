@@ -11,10 +11,12 @@
  * ※ 認証情報の直書きは禁止。値は必ずユーザー入力から取得する。
  */
 import type { JQuantsCredentials, PriceProviderMode } from "./provider";
+import { K } from "@/lib/storage/keys";
 
-const MODE_KEY = "jarvis-trade-log:price-provider-mode";
-const CRED_KEY = "jarvis-trade-log:jquants-settings";
-const STATUS_KEY = "jarvis-trade-log:jquants-status";
+const MODE_KEY = K.priceProviderMode;
+// 🔒 jquants-settings は認証情報 {email,password}。バックアップ・エクスポート対象外（security）。
+const CRED_KEY = K.jquantsSettings;
+const STATUS_KEY = K.jquantsStatus;
 
 /** 現在の Provider モード（未設定時は手入力）。 */
 export function getProviderMode(): PriceProviderMode {

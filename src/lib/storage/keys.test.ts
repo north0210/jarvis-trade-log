@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { KEY_REGISTRY, STORAGE_KEYS, BACKUP_APP, K } from "@/lib/storage/keys";
+import { KEY_REGISTRY, STORAGE_KEYS, BACKUP_APP, BACKUP_KEY_DEFS, K } from "@/lib/storage/keys";
 
 /**
  * キー参照一元化（6-1）の安全網。
@@ -206,6 +206,16 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
     // storageKey は watchlist-detections。将来の読み手が混同しないよう明示固定する。
     expect(K.watchlistEvents).toBe("jarvis-trade-log:watchlist-detections");
   });
+
+  it("K が要注意帯⑤(pricing/settings 3キー)を正しく指す（6-1 変換対象）", () => {
+    expect(K.priceProviderMode).toBe("jarvis-trade-log:price-provider-mode");
+    expect(K.jquantsSettings).toBe("jarvis-trade-log:jquants-settings");
+    expect(K.jquantsStatus).toBe("jarvis-trade-log:jquants-status");
+  });
+
+  it("K が要注意帯⑥(jquants-token-cache)を正しく指す（6-1 変換対象）", () => {
+    expect(K.jquantsTokenCache).toBe("jarvis-trade-log:jquants-token-cache");
+  });
 });
 
 describe("refName（A-1: 参照識別子）の固定化", () => {
@@ -262,6 +272,31 @@ describe("refName（A-1: 参照識別子）の固定化", () => {
     ];
     for (const name of CONVERTED) {
       expect(K[name], `K.${name} が失われている`).toBeTruthy();
+    }
+  });
+});
+
+describe("セキュリティ除外の固定化（負のアサーション）", () => {
+  // 認証・機微情報はバックアップ／エクスポートに絶対含めない、という意図を明示固定する。
+  const MUST_BE_EXCLUDED = [
+    "jarvis-trade-log:jquants-settings", // {email,password}
+    "jarvis-trade-log:jquants-status",
+    "jarvis-trade-log:jquants-token-cache", // 認証トークン
+  ];
+
+  it("BACKUP_KEY_DEFS に jquants 系キーが含まれない", () => {
+    const backupKeys = new Set(BACKUP_KEY_DEFS.map((k) => k.storageKey));
+    for (const k of MUST_BE_EXCLUDED) {
+      expect(backupKeys.has(k), `${k} はバックアップ対象に含めてはならない`).toBe(false);
+    }
+  });
+
+  it("jquants 系キーは includeInBackup=false かつ security/transient 理由付き", () => {
+    for (const k of MUST_BE_EXCLUDED) {
+      const def = KEY_REGISTRY.find((x) => x.storageKey === k);
+      expect(def, `${k} がレジストリに存在しない`).toBeTruthy();
+      expect(def!.includeInBackup, `${k} はバックアップ除外であるべき`).toBe(false);
+      expect(["security", "transient"]).toContain(def!.excludeReason);
     }
   });
 });

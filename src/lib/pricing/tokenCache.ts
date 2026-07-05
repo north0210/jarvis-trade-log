@@ -8,7 +8,10 @@
  * ※ idToken の有効期限は概ね24時間。安全側で 23 時間を TTL とする。
  *    認証情報そのもの（メール/パスワード）はここには保存しない。
  */
-const KEY = "jarvis-trade-log:jquants-token-cache";
+import { K } from "@/lib/storage/keys";
+
+// 🔒 認証トークンのキャッシュキー。バックアップ・エクスポート対象外（security）。
+const KEY = K.jquantsTokenCache;
 const TTL_MS = 23 * 60 * 60 * 1000;
 
 export interface TokenCache {
