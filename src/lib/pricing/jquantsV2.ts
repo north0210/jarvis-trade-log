@@ -50,18 +50,31 @@ export function toJQuantsCode(code: string): string {
   return c.length === 4 ? `${c}0` : c;
 }
 
+/** APIキーの取得経路（診断用・値は含めない）。 */
+export type ApiKeySource = "env" | "input" | null;
+
 /**
- * APIキーを解決する（env 優先 → リクエスト由来）。空文字は未設定として扱う。
+ * APIキーを解決する（env 優先 → リクエスト由来）。空白のみは未設定として扱う。
+ * 取得経路（env / 画面入力 / なし）も返し、env 空値の横取りを診断可能にする。
  * env は route（サーバ側）で `process.env.JQUANTS_API_KEY` を渡す。
  */
+export function resolveApiKey(
+  envKey: string | undefined | null,
+  bodyKey: string | undefined | null
+): { key: string | null; source: ApiKeySource } {
+  const e = typeof envKey === "string" ? envKey.trim() : "";
+  if (e) return { key: e, source: "env" };
+  const b = typeof bodyKey === "string" ? bodyKey.trim() : "";
+  if (b) return { key: b, source: "input" };
+  return { key: null, source: null };
+}
+
+/** APIキーのみを解決する（後方互換）。 */
 export function pickApiKey(
   envKey: string | undefined | null,
   bodyKey: string | undefined | null
 ): string | null {
-  const e = typeof envKey === "string" ? envKey.trim() : "";
-  if (e) return e;
-  const b = typeof bodyKey === "string" ? bodyKey.trim() : "";
-  return b ? b : null;
+  return resolveApiKey(envKey, bodyKey).key;
 }
 
 /** V2 レコード → 内部日足へ変換（終値は C 優先・無ければ AdjC）。 */
@@ -114,6 +127,41 @@ export function deriveQuote(code: string, bars: InternalBar[]): DerivedQuote | n
     closes,
     volumes,
   };
+}
+
+/**
+ * サブスクリプション範囲外エラー（400）のメッセージから対象期間を抽出する。
+ * 例: "Your subscription covers the following dates: 2024-04-12 ~ 2026-04-12. ..."
+ * 見つからなければ null。
+ */
+export function parseSubscriptionRange(message: string): { from: string; to: string } | null {
+  const m = message.match(/(\d{4}-\d{2}-\d{2})\s*[~〜]\s*(\d{4}-\d{2}-\d{2})/);
+  if (!m) return null;
+  return { from: m[1], to: m[2] };
+}
+
+const dateToMs = (d: string): number =>
+  Date.parse(d.length === 8 ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` : d);
+const msToDate = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+
+/**
+ * 要求窓 [from,to] を購読カバレッジ終端に合わせてクランプする。
+ * - coverageEnd が無い、または to がカバレッジ内（to<=coverageEnd）なら無変更。
+ * - to がカバレッジ外なら、**窓の幅を保ったまま**終端を coverageEnd に寄せる
+ *   （例: 直近120日要求 → [coverageEnd-120日, coverageEnd]）。
+ * これにより無料プランは最新の取得可能データを、有料プランは今日までを自然に取得する。
+ */
+export function clampToCoverage(
+  from: string,
+  to: string,
+  coverageEnd: string | null
+): { from: string; to: string; clamped: boolean } {
+  if (!coverageEnd) return { from, to, clamped: false };
+  if (dateToMs(to) <= dateToMs(coverageEnd)) return { from, to, clamped: false };
+  const widthMs = Math.max(0, dateToMs(to) - dateToMs(from));
+  const newTo = coverageEnd.slice(0, 10);
+  const newFrom = msToDate(dateToMs(coverageEnd) - widthMs);
+  return { from: newFrom, to: newTo, clamped: true };
 }
 
 /** 日足バーの取得 URL を組み立てる（pagination_key 任意）。 */

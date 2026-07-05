@@ -2,10 +2,13 @@ import { describe, it, expect } from "vitest";
 import {
   toJQuantsCode,
   pickApiKey,
+  resolveApiKey,
   mapDailyBar,
   mapDailyBars,
   deriveQuote,
   buildDailyBarsUrl,
+  parseSubscriptionRange,
+  clampToCoverage,
   JQUANTS_V2_BASE,
   type V2DailyBar,
 } from "./jquantsV2";
@@ -38,6 +41,24 @@ describe("pickApiKey（env 優先）", () => {
   it("両方無ければ null", () => {
     expect(pickApiKey(undefined, undefined)).toBeNull();
     expect(pickApiKey("", "")).toBeNull();
+  });
+});
+
+describe("resolveApiKey（キー経路の可視化）", () => {
+  it("env があれば source=env", () => {
+    expect(resolveApiKey(DUMMY_KEY, DUMMY_BODY_KEY)).toEqual({ key: DUMMY_KEY, source: "env" });
+  });
+  it("env が空白のみなら横取りせず画面入力を採用（source=input）", () => {
+    expect(resolveApiKey("   ", DUMMY_BODY_KEY)).toEqual({ key: DUMMY_BODY_KEY, source: "input" });
+    expect(resolveApiKey("", DUMMY_BODY_KEY)).toEqual({ key: DUMMY_BODY_KEY, source: "input" });
+    expect(resolveApiKey(undefined, DUMMY_BODY_KEY)).toEqual({ key: DUMMY_BODY_KEY, source: "input" });
+  });
+  it("両方空なら source=null（未設定）", () => {
+    expect(resolveApiKey("", "")).toEqual({ key: null, source: null });
+    expect(resolveApiKey(undefined, undefined)).toEqual({ key: null, source: null });
+  });
+  it("前後空白はトリムされる", () => {
+    expect(resolveApiKey(undefined, "  k  ")).toEqual({ key: "k", source: "input" });
   });
 });
 
@@ -93,6 +114,37 @@ describe("deriveQuote（最新クオート導出）", () => {
     expect(q.current_price).toBe(100);
     expect(q.previous_close).toBeNull();
     expect(q.change).toBeNull();
+  });
+});
+
+describe("parseSubscriptionRange（範囲外400メッセージの解析）", () => {
+  it("実メッセージから from ~ to を抽出", () => {
+    const msg =
+      "Your subscription covers the following dates: 2024-04-12 ~ 2026-04-12. If you want more data, please check other plans: https://jpx-jquants.com/#dataset";
+    expect(parseSubscriptionRange(msg)).toEqual({ from: "2024-04-12", to: "2026-04-12" });
+  });
+  it("全角チルダにも対応", () => {
+    expect(parseSubscriptionRange("... 2024-01-01 〜 2025-01-01 ...")).toEqual({ from: "2024-01-01", to: "2025-01-01" });
+  });
+  it("範囲が無ければ null", () => {
+    expect(parseSubscriptionRange("Invalid parameter: code")).toBeNull();
+  });
+});
+
+describe("clampToCoverage（幅保持クランプ）", () => {
+  it("coverageEnd 未知なら無変更", () => {
+    expect(clampToCoverage("2026-03-01", "2026-07-01", null)).toEqual({ from: "2026-03-01", to: "2026-07-01", clamped: false });
+  });
+  it("to がカバレッジ内なら無変更（有料プランは今日まで自然取得）", () => {
+    expect(clampToCoverage("2026-01-01", "2026-04-01", "2026-04-12")).toEqual({ from: "2026-01-01", to: "2026-04-01", clamped: false });
+  });
+  it("to が範囲外なら幅を保って終端へ寄せる（120日窓の例）", () => {
+    // to=2026-07-05 は範囲外 → 終端 2026-04-12、幅(=約120日)を保つ
+    const r = clampToCoverage("2026-03-07", "2026-07-05", "2026-04-12");
+    expect(r.clamped).toBe(true);
+    expect(r.to).toBe("2026-04-12");
+    // 幅 = 2026-07-05 - 2026-03-07 = 120日 → from = 2026-04-12 - 120日 = 2025-12-13
+    expect(r.from).toBe("2025-12-13");
   });
 });
 
