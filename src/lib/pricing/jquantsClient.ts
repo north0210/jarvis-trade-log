@@ -2,12 +2,11 @@
  * J-Quants Route Handler のクライアントラッパー（ブラウザ側）。
  * 実通信は /api/jquants（サーバ）に集約する。provider.ts と設定画面・一括更新が利用する。
  *
- * トークンキャッシュ:
- *   有効な idToken があれば Route へ渡して再認証を省略する。
- *   Route が新トークンを返した場合はキャッシュへ保存し、失敗時はキャッシュを破棄する。
+ * 認証（V2）: credentials.apiKey を body に載せて Route へ渡す。
+ *   Route 側で env（JQUANTS_API_KEY）優先 → body.apiKey の順に解決する。
+ *   V1 のトークンキャッシュ（idToken）は廃止（tokenCache.ts は @deprecated 残置）。
  */
 import type { JQuantsCredentials } from "./provider";
-import { getValidIdToken, saveTokens, clearTokenCache } from "./tokenCache";
 import { getCachedSeries, setCachedSeries, type SeriesPoint } from "@/lib/analytics/priceCache";
 
 export interface JQuantsQuote {
@@ -28,7 +27,6 @@ export interface JQuantsResponse {
   message?: string;
   quotes?: JQuantsQuote[];
   series?: SeriesPoint[];
-  token?: { idToken: string; refreshToken: string };
 }
 
 export interface SeriesResult {
@@ -51,30 +49,24 @@ async function callApi(body: unknown): Promise<JQuantsResponse> {
   }
 }
 
-/** レスポンスのトークンをキャッシュへ反映する。 */
-function syncTokenCache(res: JQuantsResponse): void {
-  if (res.token) saveTokens(res.token);
-  else if (!res.ok) clearTokenCache();
+/** 認証情報から V2 APIキーを取り出す。 */
+function apiKeyOf(credentials: JQuantsCredentials | null): string | undefined {
+  return credentials?.apiKey;
 }
 
-/** 接続テスト（認証のみ）。新トークンをキャッシュする。 */
+/** 接続テスト（APIキー認証の疎通確認）。 */
 export async function testJQuantsConnection(
   credentials: JQuantsCredentials | null
 ): Promise<JQuantsResponse> {
-  const res = await callApi({ action: "test", credentials });
-  syncTokenCache(res);
-  return res;
+  return callApi({ action: "test", apiKey: apiKeyOf(credentials) });
 }
 
-/** 銘柄コード群のクオートを取得する。キャッシュ済み idToken を優先利用する。 */
+/** 銘柄コード群のクオートを取得する（V2・APIキー）。 */
 export async function fetchJQuantsQuotes(
   codes: string[],
   credentials: JQuantsCredentials | null
 ): Promise<JQuantsResponse> {
-  const idToken = getValidIdToken();
-  const res = await callApi({ action: "quotes", codes, credentials, idToken });
-  syncTokenCache(res);
-  return res;
+  return callApi({ action: "quotes", codes, apiKey: apiKeyOf(credentials) });
 }
 
 /** 期間指定の日足系列を取得（キャッシュ優先）。 */
@@ -87,9 +79,7 @@ export async function fetchJQuantsSeries(
   const cached = getCachedSeries(code, from, to);
   if (cached) return { ok: true, series: cached, cached: true };
 
-  const idToken = getValidIdToken();
-  const res = await callApi({ action: "series", code, from, to, credentials, idToken });
-  syncTokenCache(res);
+  const res = await callApi({ action: "series", code, from, to, apiKey: apiKeyOf(credentials) });
   if (res.ok && res.series) {
     setCachedSeries(code, from, to, res.series);
     return { ok: true, series: res.series, cached: false };

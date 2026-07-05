@@ -112,6 +112,7 @@ export default function SettingsPage() {
   const [msg, setMsg] = useState<Msg>(null);
   const [tvEnabled, setTvEnabled] = useState(true);
   const [mode, setMode] = useState<PriceProviderMode>("manual");
+  const [apiKey, setApiKey] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [jqStatus, setJqStatus] = useState<JQuantsStatusRecord | null>(null);
@@ -162,16 +163,17 @@ export default function SettingsPage() {
     getLLMProviderStatus().then((r) => setAiProvider(r.provider));
     const cred = getJQuantsCredentials();
     if (cred) {
-      setEmail(cred.email);
-      setPassword(cred.password);
+      setApiKey(cred.apiKey ?? "");
+      setEmail(cred.email ?? "");
+      setPassword(cred.password ?? "");
     }
   }, []);
 
   const testConnection = async () => {
     setTesting(true);
     // 直近入力を保存してからテスト（env 設定時はサーバ側で env が優先される）
-    setJQuantsCredentials({ email, password });
-    const res = await testJQuantsConnection({ email, password });
+    setJQuantsCredentials({ apiKey, email, password });
+    const res = await testJQuantsConnection({ apiKey });
     const record: JQuantsStatusRecord = {
       status: res.status,
       at: new Date().toISOString(),
@@ -358,7 +360,7 @@ export default function SettingsPage() {
 
   const saveProvider = () => {
     setProviderMode(mode);
-    setJQuantsCredentials({ email, password });
+    setJQuantsCredentials({ apiKey, email, password });
     setMsg({
       tone: "ok",
       text: `価格プロバイダ設定を保存しました（モード: ${mode === "jquants-ready" ? "J-Quants準備" : "手入力"}）。`,
@@ -603,35 +605,51 @@ export default function SettingsPage() {
               <option value="jquants-ready">J-Quants準備モード</option>
             </select>
           </label>
-          <div className="hidden md:block" />
           <label className="block">
-            <span className="hud-label">メールアドレス</span>
-            <input
-              className="hud-input mt-1"
-              type="email"
-              autoComplete="off"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-            />
-          </label>
-          <label className="block">
-            <span className="hud-label">パスワード</span>
+            <span className="hud-label">APIキー（V2）</span>
             <input
               className="hud-input mt-1"
               type="password"
               autoComplete="off"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="ダッシュボード [設定 » APIキー] で発行"
             />
           </label>
+          <details className="md:col-span-2">
+            <summary className="hud-label cursor-pointer">V1 認証（email/password・非推奨）</summary>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 mt-2">
+              <label className="block">
+                <span className="hud-label">メールアドレス</span>
+                <input
+                  className="hud-input mt-1"
+                  type="email"
+                  autoComplete="off"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
+              </label>
+              <label className="block">
+                <span className="hud-label">パスワード</span>
+                <input
+                  className="hud-input mt-1"
+                  type="password"
+                  autoComplete="off"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </label>
+            </div>
+          </details>
         </div>
         <p className="text-danger text-xs mt-2">
-          ⚠ 注意: パスワードは localStorage に平文保存されます。本番運用では保存非推奨です。
+          ⚠ 注意: APIキー等は localStorage に平文保存されます（バックアップ・エクスポート対象外）。
           個人ローカルMVPとしてのみご利用ください。
         </p>
         <p className="text-arcdim text-xs mt-1">
-          ※ env（JQUANTS_EMAIL / JQUANTS_PASSWORD）が設定されている場合はサーバ側で env が優先されます。
+          ※ env（JQUANTS_API_KEY）が設定されている場合はサーバ側で env が優先されます。
+          V1（JQUANTS_EMAIL / JQUANTS_PASSWORD）は 2025-12-22 以降の登録者は利用不可（@deprecated）。
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button className="hud-btn" onClick={saveProvider}>プロバイダ設定を保存</button>

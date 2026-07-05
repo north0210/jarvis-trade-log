@@ -31,25 +31,38 @@ export function setProviderMode(mode: PriceProviderMode): void {
   window.localStorage.setItem(MODE_KEY, mode);
 }
 
-/** J-Quants 認証情報（未保存なら null）。 */
+/** J-Quants 認証情報（apiKey / email / password のうち保存済みのもの。無ければ null）。 */
 export function getJQuantsCredentials(): JQuantsCredentials | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(CRED_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<JQuantsCredentials>;
-    if (typeof parsed.email === "string" && typeof parsed.password === "string") {
-      return { email: parsed.email, password: parsed.password };
-    }
-    return null;
+    const cred: JQuantsCredentials = {};
+    if (typeof parsed.apiKey === "string") cred.apiKey = parsed.apiKey;
+    if (typeof parsed.email === "string") cred.email = parsed.email;
+    if (typeof parsed.password === "string") cred.password = parsed.password;
+    return cred.apiKey || cred.email || cred.password ? cred : null;
   } catch {
     return null;
   }
 }
 
+/** 認証情報を保存する（既存フィールドとマージして上書き）。 */
 export function setJQuantsCredentials(cred: JQuantsCredentials): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(CRED_KEY, JSON.stringify(cred));
+  const merged = { ...(getJQuantsCredentials() ?? {}), ...cred };
+  window.localStorage.setItem(CRED_KEY, JSON.stringify(merged));
+}
+
+/** V2 APIキー（未保存なら null）。 */
+export function getJQuantsApiKey(): string | null {
+  return getJQuantsCredentials()?.apiKey ?? null;
+}
+
+/** V2 APIキーを保存する（他フィールドは維持）。 */
+export function setJQuantsApiKey(apiKey: string): void {
+  setJQuantsCredentials({ apiKey });
 }
 
 /** J-Quants 接続状態の記録。 */

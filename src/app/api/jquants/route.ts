@@ -1,169 +1,68 @@
 /**
- * J-Quants API Route Handler（サーバ側）。
+ * J-Quants API V2 Route Handler（サーバ側）。
  *
- * フロントから直接 J-Quants を叩かず、この Route を経由する（CORS回避・認証情報の秘匿）。
+ * フロントから直接 J-Quants を叩かず、この Route を経由する（CORS回避・APIキーの秘匿）。
  *
- * 認証情報の優先順位（重要）:
- *   1. 環境変数 JQUANTS_EMAIL / JQUANTS_PASSWORD（本番推奨・サーバ側のみ）
- *   2. リクエストボディの credentials（localStorage 由来・個人ローカルMVP）
- *   env が設定されていれば localStorage 由来より優先する。
+ * 認証（V2・APIキー方式）:
+ *   ヘッダ `x-api-key: <APIキー>` を付与。トークン交換（V1）は不要・廃止。
+ *   APIキーの優先順位: 環境変数 JQUANTS_API_KEY（本番推奨・サーバ側のみ）→ リクエストボディ apiKey。
+ *   → env が設定されていれば localStorage 由来（body.apiKey）より優先する。
  *
- * トークンキャッシュ:
- *   body.idToken が渡された場合はそれを使用（再認証を省略）。
- *   期限切れ（401）を検知した場合のみ creds で再認証し、新トークンを token として返す。
- *   → クライアントは受け取った token を localStorage にキャッシュする。
+ * ※ APIキーの直書きは禁止。env 未設定でも build/lint は通る（実行時のみ参照）。
+ *   V1（email/password）認証は jquantsV1.deprecated.ts に @deprecated 残置（非破壊）。
  *
- * ※ 認証情報の直書きは禁止。env 未設定でも build/lint は通る（実行時のみ参照）。
- *
- * body: { action: "test"|"quotes", codes?: string[], credentials?: {email,password}, idToken?: string }
+ * body: { action: "test"|"quotes"|"series", codes?: string[], apiKey?: string,
+ *         code?: string, from?: string, to?: string }
  */
 import { NextResponse } from "next/server";
-
-const BASE = "https://api.jquants.com/v1";
-
-interface Creds {
-  email: string;
-  password: string;
-}
-
-interface Tokens {
-  idToken: string;
-  refreshToken: string;
-}
+import {
+  buildDailyBarsUrl,
+  mapDailyBars,
+  deriveQuote,
+  pickApiKey,
+  type V2DailyBar,
+  type InternalBar,
+} from "@/lib/pricing/jquantsV2";
 
 interface RequestBody {
   action?: string;
   codes?: unknown;
-  credentials?: { email?: string; password?: string };
-  idToken?: string;
-  code?: string; // series 用
-  from?: string; // series 用 YYYY-MM-DD
-  to?: string; // series 用 YYYY-MM-DD
-}
-
-interface DailyQuote {
-  Date?: string;
-  Close?: number | null;
-  AdjustmentClose?: number | null;
-  Volume?: number | null;
-}
-
-/** env 優先で認証情報を解決する。 */
-function resolveCreds(bodyCred?: RequestBody["credentials"]): Creds | null {
-  const email = process.env.JQUANTS_EMAIL || bodyCred?.email;
-  const password = process.env.JQUANTS_PASSWORD || bodyCred?.password;
-  if (email && password) return { email, password };
-  return null;
-}
-
-/** 銘柄コードを J-Quants 形式（5桁）へ変換する（4桁 → 末尾0付与）。 */
-function toJQuantsCode(code: string): string {
-  const c = code.trim();
-  return c.length === 4 ? `${c}0` : c;
-}
-
-/** refresh token → id token を取得する。 */
-async function getTokens(c: Creds): Promise<Tokens> {
-  const authRes = await fetch(`${BASE}/token/auth_user`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ mailaddress: c.email, password: c.password }),
-  });
-  if (!authRes.ok) throw new Error(`認証失敗 (auth_user: ${authRes.status})`);
-  const authJson = (await authRes.json()) as { refreshToken?: string };
-  if (!authJson.refreshToken) throw new Error("refreshToken を取得できませんでした");
-
-  const refRes = await fetch(
-    `${BASE}/token/auth_refresh?refreshtoken=${encodeURIComponent(authJson.refreshToken)}`,
-    { method: "POST" }
-  );
-  if (!refRes.ok) throw new Error(`認証失敗 (auth_refresh: ${refRes.status})`);
-  const refJson = (await refRes.json()) as { idToken?: string };
-  if (!refJson.idToken) throw new Error("idToken を取得できませんでした");
-  return { idToken: refJson.idToken, refreshToken: authJson.refreshToken };
+  apiKey?: string;
+  code?: string; // series/quote 用
+  from?: string; // YYYY-MM-DD
+  to?: string; // YYYY-MM-DD
 }
 
 const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
 
-/** 単一銘柄の最新クオートを取得する。HTTP status も返し 401/429 を上位で判定する。 */
-async function fetchQuote(idToken: string, code: string) {
-  const to = new Date();
-  const from = new Date(to.getTime() - 120 * 24 * 60 * 60 * 1000);
-  const url =
-    `${BASE}/prices/daily_quotes?code=${encodeURIComponent(toJQuantsCode(code))}` +
-    `&from=${fmtDate(from)}&to=${fmtDate(to)}`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } });
-  if (!res.ok) return { status: res.status, quote: null };
-
-  const data = (await res.json()) as { daily_quotes?: DailyQuote[] };
-  const arr = Array.isArray(data.daily_quotes) ? data.daily_quotes : [];
-  // TODO: pagination_key 対応（長期履歴銘柄）
-  if (arr.length === 0) return { status: 200, quote: null };
-
-  const latest = arr[arr.length - 1];
-  const prev = arr.length >= 2 ? arr[arr.length - 2] : null;
-  const close = latest.Close ?? latest.AdjustmentClose ?? null;
-  const prevClose = prev ? (prev.Close ?? prev.AdjustmentClose ?? null) : null;
-  const change = close != null && prevClose != null ? close - prevClose : null;
-  const changeRate = change != null && prevClose ? (change / prevClose) * 100 : null;
-
-  const closes = arr
-    .map((d) => d.Close ?? d.AdjustmentClose ?? null)
-    .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  const volumes = arr
-    .map((d) => d.Volume ?? null)
-    .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-
-  return {
-    status: 200,
-    quote: {
-      code,
-      current_price: close,
-      previous_close: prevClose,
-      change,
-      change_rate: changeRate,
-      volume: latest.Volume ?? null,
-      date: latest.Date ?? null,
-      closes, // RSI 算出に使用（Provider 側で計算）
-      volumes, // 出来高指標算出に使用（Phase 42）
-    },
-  };
+/** x-api-key ヘッダを組み立てる。 */
+function authHeaders(apiKey: string): HeadersInit {
+  return { "x-api-key": apiKey };
 }
 
-/** 期間指定の日足系列を pagination 対応で取得する。 */
-async function fetchSeries(idToken: string, code: string, from: string, to: string) {
-  const base =
-    `${BASE}/prices/daily_quotes?code=${encodeURIComponent(toJQuantsCode(code))}&from=${from}&to=${to}`;
-  const rows: DailyQuote[] = [];
+/**
+ * 期間指定の日足バーを pagination 対応で全件取得する。
+ * status（HTTP）と内部日足を返し、401/403/429 を上位で判定する。
+ */
+async function fetchBars(
+  apiKey: string,
+  code: string,
+  from: string,
+  to: string
+): Promise<{ status: number; bars: InternalBar[] | null }> {
+  const raw: V2DailyBar[] = [];
   let key: string | undefined;
   let guard = 0;
   do {
-    const url = key ? `${base}&pagination_key=${encodeURIComponent(key)}` : base;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } });
-    if (!res.ok) return { status: res.status, series: null as null | SeriesPoint[] };
-    const data = (await res.json()) as { daily_quotes?: DailyQuote[]; pagination_key?: string };
-    if (Array.isArray(data.daily_quotes)) rows.push(...data.daily_quotes);
+    const url = buildDailyBarsUrl({ code, from, to, paginationKey: key });
+    const res = await fetch(url, { headers: authHeaders(apiKey) });
+    if (!res.ok) return { status: res.status, bars: null };
+    const data = (await res.json()) as { data?: V2DailyBar[]; pagination_key?: string };
+    if (Array.isArray(data.data)) raw.push(...data.data);
     key = data.pagination_key;
     guard++;
   } while (key && guard < 100); // 安全弁
-
-  const series: SeriesPoint[] = rows
-    .map((d) => ({
-      date: d.Date ?? "",
-      close: d.Close ?? d.AdjustmentClose ?? null,
-      adjClose: d.AdjustmentClose ?? null,
-      volume: d.Volume ?? null,
-    }))
-    .filter((x) => x.date && x.close != null)
-    .sort((a, b) => a.date.localeCompare(b.date));
-  return { status: 200, series };
-}
-
-interface SeriesPoint {
-  date: string;
-  close: number | null;
-  adjClose: number | null;
-  volume: number | null;
+  return { status: 200, bars: mapDailyBars(raw) };
 }
 
 export async function POST(req: Request) {
@@ -175,114 +74,82 @@ export async function POST(req: Request) {
   }
   const action =
     body.action === "quotes" ? "quotes" : body.action === "series" ? "series" : "test";
-  const creds = resolveCreds(body.credentials);
+  const apiKey = pickApiKey(process.env.JQUANTS_API_KEY, body.apiKey);
+
+  if (!apiKey) {
+    return NextResponse.json({
+      ok: false,
+      status: "unset",
+      message: "APIキーが未設定です（.env.local の JQUANTS_API_KEY または設定画面で入力してください）",
+    });
+  }
 
   try {
-    // 接続テスト: 認証のみ実施し新トークンを返す。
+    // 接続テスト: 軽量に 1 銘柄の直近を叩き、認証可否を確認する。
     if (action === "test") {
-      if (!creds) {
-        return NextResponse.json({
-          ok: false,
-          status: "unset",
-          message: "認証情報が未設定です（env または設定画面で入力してください）",
-        });
+      const to = new Date();
+      const from = new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000);
+      // 代表的な流動銘柄（トヨタ 7203）で疎通確認。データ有無ではなく認証成否を見る。
+      const res = await fetch(
+        buildDailyBarsUrl({ code: "7203", from: fmtDate(from), to: fmtDate(to) }),
+        { headers: authHeaders(apiKey) }
+      );
+      if (res.status === 401 || res.status === 403) {
+        return NextResponse.json({ ok: false, status: "error", message: "APIキーが無効です（認証エラー）。" });
       }
-      const t = await getTokens(creds);
-      return NextResponse.json({ ok: true, status: "connected", message: "接続成功", token: t });
+      if (res.status === 429) {
+        return NextResponse.json({ ok: false, status: "error", message: "レート制限に達しました。時間をおいて再試行してください。" });
+      }
+      if (!res.ok) {
+        return NextResponse.json({ ok: false, status: "error", message: `接続失敗 (${res.status})` });
+      }
+      return NextResponse.json({ ok: true, status: "connected", message: "接続成功" });
     }
 
-    // 価格取得
-    let idToken = typeof body.idToken === "string" && body.idToken ? body.idToken : null;
-    let freshToken: Tokens | null = null;
+    const to = typeof body.to === "string" ? body.to : fmtDate(new Date());
 
-    if (!idToken) {
-      if (!creds) {
-        return NextResponse.json({
-          ok: false,
-          status: "unset",
-          message: "認証情報が未設定です（env または設定画面で入力してください）",
-        });
-      }
-      const t = await getTokens(creds);
-      idToken = t.idToken;
-      freshToken = t;
-    }
-
-    // 日足系列（pagination）
+    // 日足系列（pagination・バックテスト用）
     if (action === "series") {
       const code = typeof body.code === "string" ? body.code : "";
-      const from = typeof body.from === "string" ? body.from : fmtDate(new Date(Date.now() - 365 * 24 * 60 * 60 * 1000));
-      const to = typeof body.to === "string" ? body.to : fmtDate(new Date());
-      if (!code)
-        return NextResponse.json({ ok: false, status: "error", message: "code が必要です", token: freshToken ?? undefined });
-      let r = await fetchSeries(idToken, code, from, to);
-      if (r.status === 401 && creds) {
-        const t = await getTokens(creds);
-        idToken = t.idToken;
-        freshToken = t;
-        r = await fetchSeries(idToken, code, from, to);
-      }
+      const from =
+        typeof body.from === "string"
+          ? body.from
+          : fmtDate(new Date(Date.now() - 365 * 24 * 60 * 60 * 1000));
+      if (!code) return NextResponse.json({ ok: false, status: "error", message: "code が必要です" });
+      const r = await fetchBars(apiKey, code, from, to);
+      if (r.status === 401 || r.status === 403)
+        return NextResponse.json({ ok: false, status: "error", message: "APIキーが無効です（認証エラー）。" });
       if (r.status === 429)
-        return NextResponse.json({ ok: false, status: "error", message: "レート制限に達しました。時間をおいて再試行してください。", token: freshToken ?? undefined });
-      if (!r.series)
-        return NextResponse.json({ ok: false, status: "error", message: `系列取得に失敗しました (${code}: ${r.status})`, token: freshToken ?? undefined });
-      return NextResponse.json({ ok: true, status: "connected", series: r.series, token: freshToken ?? undefined });
+        return NextResponse.json({ ok: false, status: "error", message: "レート制限に達しました。時間をおいて再試行してください。" });
+      if (!r.bars)
+        return NextResponse.json({ ok: false, status: "error", message: `系列取得に失敗しました (${code}: ${r.status})` });
+      return NextResponse.json({ ok: true, status: "connected", series: r.bars });
     }
 
+    // 価格取得（quotes）。直近 120 日を取得し最新クオート＋系列を導出。
     const codes = Array.isArray(body.codes)
       ? body.codes.filter((x): x is string => typeof x === "string")
       : [];
+    const from =
+      typeof body.from === "string"
+        ? body.from
+        : fmtDate(new Date(Date.now() - 120 * 24 * 60 * 60 * 1000));
 
     const quotes = [];
-    let reAuthed = false;
-    let rateLimited = false;
-
     for (const code of codes) {
-      let r = await fetchQuote(idToken, code);
-
-      // idToken 期限切れ（401）は creds で一度だけ再認証してリトライ
-      if (r.status === 401) {
-        if (!creds) {
-          return NextResponse.json({
-            ok: false,
-            status: "error",
-            message: "認証トークンが期限切れです。設定画面で認証情報を入力してください。",
-          });
-        }
-        if (!reAuthed) {
-          const t = await getTokens(creds);
-          idToken = t.idToken;
-          freshToken = t;
-          reAuthed = true;
-          r = await fetchQuote(idToken, code);
-        }
+      const r = await fetchBars(apiKey, code, from, to);
+      if (r.status === 401 || r.status === 403) {
+        return NextResponse.json({ ok: false, status: "error", message: "APIキーが無効です（認証エラー）。" });
       }
-
-      // レート制限は処理を停止してメッセージを返す
       if (r.status === 429) {
-        rateLimited = true;
-        break;
+        return NextResponse.json({ ok: false, status: "error", message: "レート制限に達しました。時間をおいて再試行してください。" });
       }
-
-      if (r.quote) quotes.push(r.quote);
-      // それ以外の失敗銘柄はスキップ（部分成功を許容）
+      if (!r.bars) continue; // その他の失敗銘柄はスキップ（部分成功を許容）
+      const q = deriveQuote(code, r.bars);
+      if (q) quotes.push(q);
     }
 
-    if (rateLimited) {
-      return NextResponse.json({
-        ok: false,
-        status: "error",
-        message: "レート制限に達しました。時間をおいて再試行してください。",
-        token: freshToken ?? undefined,
-      });
-    }
-
-    return NextResponse.json({
-      ok: true,
-      status: "connected",
-      quotes,
-      token: freshToken ?? undefined,
-    });
+    return NextResponse.json({ ok: true, status: "connected", quotes });
   } catch (e) {
     return NextResponse.json({
       ok: false,

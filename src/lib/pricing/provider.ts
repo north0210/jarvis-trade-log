@@ -43,26 +43,31 @@ export class ManualPriceProvider implements PriceProvider {
 /** 価格取得のモード。UI・設定で切り替える。 */
 export type PriceProviderMode = "manual" | "jquants-ready";
 
-/** J-Quants 認証情報（本番では保存非推奨。個人ローカルMVPのみ）。 */
+/**
+ * J-Quants 認証情報。
+ * - V2（現行）: `apiKey`（ダッシュボード発行のAPIキー）。x-api-key ヘッダで送出。
+ * - V1（@deprecated）: `email` / `password`。2025-12-22 以降の登録者は利用不可。
+ * すべて任意。保存は security 扱い（バックアップ除外）。
+ */
 export interface JQuantsCredentials {
-  email: string;
-  password: string;
+  /** V2 APIキー（現行方式）。 */
+  apiKey?: string;
+  /** @deprecated V1 のみ。 */
+  email?: string;
+  /** @deprecated V1 のみ。 */
+  password?: string;
 }
 
 /**
- * J-Quants 接続用 Provider（準備段階）。
- *
- * 現時点では実API通信は行わず、安全に fallback（ManualPriceProvider）へ委譲する。
- * 認証情報が無い場合・取得失敗時も fallback を用いるため、UI は無改修で動作する。
+ * J-Quants 接続用 Provider（V2・APIキー方式）。
  *
  * 通信は必ず Route Handler（/api/jquants）経由で行う（jquantsClient）。
- * 認証情報は env 優先（サーバ側）→ localStorage（credentials）。直書きは禁止。
+ * 認証は env 優先（JQUANTS_API_KEY・サーバ側）→ localStorage（credentials.apiKey）。直書き禁止。
  *
- * 実装済み: 認証 / 銘柄コード変換(4→5桁) / 株価取得(daily_quotes) / エラー時fallback。
- * TODO（次フェーズ以降）:
- *  - RSI算出: 日足終値系列から計算（今回は取得せず手入力値を維持）
- *  - 出来高保存: daily_quotes の volume（Stock型に項目が無いため現状保存しない）
- *  - レート制限対応: id token キャッシュ / リトライ / 指数バックオフ / pagination
+ * 取得失敗・認証失敗・APIキー未設定時は安全に fallback（ManualPriceProvider）へ委譲するため、
+ * UI・Score・Alert は無改修で動作する。RSI は取得系列から indicators/rsi で自動算出する。
+ *
+ * ※ レート制限（5req/分）・進捗表示は B-2 で本 Provider 層に実装予定。
  */
 export class JQuantsPriceProvider implements PriceProvider {
   readonly name = "jquants";
