@@ -13,6 +13,7 @@
  */
 import { fetchJQuantsBarsByDate } from "@/lib/pricing/jquantsClient";
 import { getFundamentalsProvider } from "@/lib/pricing/fundamentalsProvider";
+import { getJQuantsRateLimiter } from "@/lib/pricing/rateLimiter";
 import { fetchUniverse, fetchBarsBatch, recentWeekdays } from "./batch";
 import { filterCommonStocks } from "./universe";
 import { buildScreenerRows, selectTopN, rescoreWithFundamentals, rankRows } from "./technical";
@@ -20,6 +21,31 @@ import { saveUniverse, saveScreenerSnapshot, type ScreenerSnapshot } from "./scr
 import type { JQuantsCredentials, BulkStop } from "@/lib/pricing/provider";
 
 export type ScreenerPhase = "universe" | "bars" | "fins";
+/** 診断用の全フェーズ（probe を含む）。 */
+type DiagPhase = "probe" | "universe" | "bars" | "fins";
+
+const PHASE_JP: Record<DiagPhase, string> = {
+  probe: "最新日検出",
+  universe: "上場一覧",
+  bars: "価格系列",
+  fins: "財務指標",
+};
+
+function reasonJp(s: BulkStop | null): string {
+  return s === "auth" ? "認証エラー" : s === "rate" ? "レート制限" : s === "aborted" ? "ユーザー中断" : "エラー";
+}
+
+/** 中断メッセージ（理由＋フェーズ）。rate は再試行を促す。 */
+function stopMessage(phase: DiagPhase, s: BulkStop | null): string {
+  const base = `${PHASE_JP[phase]}フェーズで中断しました（理由: ${reasonJp(s)}）。`;
+  if (s === "rate") return base + "時間をおいて再試行してください（5リクエスト/分）。";
+  if (s === "auth") return base + "設定画面で APIキーを確認してください。";
+  return base;
+}
+
+function isAbort(e: unknown): boolean {
+  return e instanceof Error && e.name === "AbortError";
+}
 
 export interface ScreenerRunOptions {
   onProgress?: (phase: ScreenerPhase, done: number, total: number) => void;
@@ -56,20 +82,27 @@ export async function runScreener(
   const topNFins = opts?.topNFins ?? 50;
 
   // 0) アンカー日（カバレッジ内の最新営業日）を決定。省略時は probe（route が終端へクランプ）。
+  //    probe も共有リミッタ（5req/分）を消費する。
   let anchor = opts?.anchorDate;
   if (!anchor) {
+    try {
+      await getJQuantsRateLimiter().acquire(signal);
+    } catch (e) {
+      if (isAbort(e)) return discard("aborted", stopMessage("probe", "aborted"));
+      throw e;
+    }
     const probe = await fetchJQuantsBarsByDate(fmtDate(new Date()), credentials);
     if (!probe.ok) {
       const st: BulkStop | null = probe.reason === "auth" ? "auth" : probe.reason === "rate" ? "rate" : null;
-      return discard(st, probe.message ?? "最新の取得可能日を特定できませんでした。");
+      return discard(st, stopMessage("probe", st) + (probe.message ? `（${probe.message}）` : ""));
     }
     anchor = probe.date ?? fmtDate(new Date());
   }
 
-  // 1) universe → 個別株フィルタ
+  // 1) universe → 個別株フィルタ（共有リミッタ経由）
   opts?.onProgress?.("universe", 0, 1);
-  const uni = await fetchUniverse(anchor, credentials);
-  if (uni.stopped) return discard(uni.stopped, uni.error ?? "ユニバース取得に失敗しました。");
+  const uni = await fetchUniverse(anchor, credentials, { signal });
+  if (uni.stopped) return discard(uni.stopped, stopMessage("universe", uni.stopped));
   const common = filterCommonStocks(uni.universe);
   const universeCount = common.length;
   opts?.onProgress?.("universe", 1, 1);
@@ -80,7 +113,7 @@ export async function runScreener(
     signal,
     onProgress: (p) => opts?.onProgress?.("bars", p.done, p.total),
   });
-  if (batch.stopped) return discard(batch.stopped, "価格系列の取得を中断しました（破棄）。");
+  if (batch.stopped) return discard(batch.stopped, stopMessage("bars", batch.stopped));
 
   // 3) 技術ランク → 上位N
   const rows = buildScreenerRows(common, batch.seriesByCode);
@@ -96,7 +129,7 @@ export async function runScreener(
     { signal, onProgress: (p) => opts?.onProgress?.("fins", p.done, p.total) }
   );
   if (fund.stopped === "auth" || fund.stopped === "aborted") {
-    return discard(fund.stopped, fund.stopped === "auth" ? "財務取得で認証エラー（破棄）。" : "財務取得を中断しました（破棄）。");
+    return discard(fund.stopped, stopMessage("fins", fund.stopped));
   }
 
   // 5) フルスコア再算出（未取得は技術のみで残留・fundamentalsAvailable=false）

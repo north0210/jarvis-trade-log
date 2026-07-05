@@ -46,11 +46,24 @@ export interface UniverseFetchResult {
   error?: string;
 }
 
-/** 上場マスタを取得しユニバースを構築する（1 リクエスト）。 */
+export interface UniverseFetchOptions {
+  limiter?: RateLimiter;
+  signal?: AbortSignal;
+}
+
+/** 上場マスタを取得しユニバースを構築する（1 リクエスト・共有リミッタ経由）。 */
 export async function fetchUniverse(
   date: string | undefined,
-  credentials: JQuantsCredentials | null
+  credentials: JQuantsCredentials | null,
+  opts?: UniverseFetchOptions
 ): Promise<UniverseFetchResult> {
+  const limiter = opts?.limiter ?? getJQuantsRateLimiter();
+  try {
+    await limiter.acquire(opts?.signal);
+  } catch (e) {
+    if (isAbort(e)) return { universe: [], stopped: "aborted" };
+    throw e;
+  }
   const res = await fetchJQuantsMaster(date, credentials);
   if (!res.ok) {
     const stopped: BulkStop | null = res.reason === "auth" ? "auth" : res.reason === "rate" ? "rate" : null;
@@ -59,8 +72,34 @@ export async function fetchUniverse(
   return { universe: buildUniverse(res.master ?? []), stopped: null };
 }
 
+/** 中断可能な待機（自動リトライ用）。 */
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      const e = new Error("Aborted");
+      e.name = "AbortError";
+      return reject(e);
+    }
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(t);
+        const e = new Error("Aborted");
+        e.name = "AbortError";
+        reject(e);
+      },
+      { once: true }
+    );
+  });
+}
+
 export interface BarsBatchOptions extends FetchQuotesOptions {
   limiter?: RateLimiter;
+  /** 初回1発目の rate に対する自動待機（テスト用に注入可）。 */
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  /** 初回 rate リトライ前の待機（既定 60 秒）。 */
+  retryWaitMs?: number;
 }
 
 export interface BarsBatchResult {
@@ -82,6 +121,8 @@ export async function fetchBarsBatch(
   opts?: BarsBatchOptions
 ): Promise<BarsBatchResult> {
   const limiter = opts?.limiter ?? getJQuantsRateLimiter();
+  const sleep = opts?.sleep ?? abortableSleep;
+  const retryWaitMs = opts?.retryWaitMs ?? 60_000;
   const allBars: V2DailyBar[] = [];
   let fetched = 0;
   let empty = 0;
@@ -106,7 +147,19 @@ export async function fetchBarsBatch(
       throw e;
     }
 
-    const res = await fetchJQuantsBarsByDate(date, credentials);
+    let res = await fetchJQuantsBarsByDate(date, credentials);
+
+    // 初回1発目の rate のみ自動待機して1回だけリトライ（bars 途中の rate は破棄）。
+    if (!res.ok && res.reason === "rate" && fetched === 0) {
+      try {
+        await sleep(retryWaitMs, opts?.signal);
+      } catch (e) {
+        if (isAbort(e)) return finalize("aborted");
+        throw e;
+      }
+      res = await fetchJQuantsBarsByDate(date, credentials);
+    }
+
     if (!res.ok) {
       if (res.reason === "auth") return finalize("auth");
       if (res.reason === "rate") return finalize("rate");

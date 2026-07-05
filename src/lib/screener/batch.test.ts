@@ -46,15 +46,22 @@ describe("recentWeekdays（純関数・土日除外・新しい順）", () => {
 describe("fetchUniverse", () => {
   it("成功時はユニバースを構築", async () => {
     fetchJQuantsMaster.mockResolvedValue({ ok: true, status: "connected", master: [{ Code: "72030", CoName: "トヨタ" }, { Code: "99840", CoName: "SBG" }] });
-    const r = await fetchUniverse("2026-04-10", { apiKey: DUMMY_KEY });
+    const r = await fetchUniverse("2026-04-10", { apiKey: DUMMY_KEY }, { limiter: NO_WAIT });
     expect(r.universe.map((u) => u.code).sort()).toEqual(["72030", "99840"]);
     expect(r.stopped).toBeNull();
   });
   it("認証失敗は stopped=auth・空ユニバース", async () => {
     fetchJQuantsMaster.mockResolvedValue({ ok: false, status: "error", reason: "auth", message: "認証エラー" });
-    const r = await fetchUniverse("2026-04-10", { apiKey: DUMMY_KEY });
+    const r = await fetchUniverse("2026-04-10", { apiKey: DUMMY_KEY }, { limiter: NO_WAIT });
     expect(r.stopped).toBe("auth");
     expect(r.universe).toEqual([]);
+  });
+
+  it("共有/注入リミッタを acquire する（網羅）", async () => {
+    const acquire = vi.fn().mockResolvedValue(undefined);
+    fetchJQuantsMaster.mockResolvedValue({ ok: true, status: "connected", master: [{ Code: "72030" }] });
+    await fetchUniverse("2026-04-10", { apiKey: DUMMY_KEY }, { limiter: { acquire } });
+    expect(acquire).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -103,5 +110,26 @@ describe("fetchBarsBatch", () => {
     const r = await fetchBarsBatch(["2026-04-10"], { apiKey: DUMMY_KEY }, { limiter: NO_WAIT, signal: c.signal });
     expect(r.stopped).toBe("aborted");
     expect(fetchJQuantsBarsByDate).not.toHaveBeenCalled();
+  });
+
+  it("初回1発目の rate は自動待機して1回リトライ", async () => {
+    fetchJQuantsBarsByDate
+      .mockResolvedValueOnce({ ok: false, status: "error", reason: "rate" })
+      .mockResolvedValueOnce(barsResp("2026-04-10", ["72030"]));
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const r = await fetchBarsBatch(["2026-04-10"], { apiKey: DUMMY_KEY }, { limiter: NO_WAIT, sleep, retryWaitMs: 1 });
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(r.stopped).toBeNull();
+    expect(r.seriesByCode.has("72030")).toBe(true);
+  });
+
+  it("2件目以降の rate はリトライせず破棄（stopped=rate）", async () => {
+    fetchJQuantsBarsByDate
+      .mockResolvedValueOnce(barsResp("2026-04-10", ["72030"]))
+      .mockResolvedValueOnce({ ok: false, status: "error", reason: "rate" });
+    const sleep = vi.fn();
+    const r = await fetchBarsBatch(["2026-04-10", "2026-04-09"], { apiKey: DUMMY_KEY }, { limiter: NO_WAIT, sleep });
+    expect(sleep).not.toHaveBeenCalled();
+    expect(r.stopped).toBe("rate");
   });
 });

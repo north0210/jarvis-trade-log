@@ -9,6 +9,7 @@
 import type { JQuantsCredentials } from "./provider";
 import { getCachedSeries, setCachedSeries, type SeriesPoint } from "@/lib/analytics/priceCache";
 import type { V2FinRecord, V2MasterRecord } from "./jquantsV2";
+import { getJQuantsRateLimiter } from "./rateLimiter";
 
 export interface JQuantsQuote {
   code: string;
@@ -62,10 +63,11 @@ function apiKeyOf(credentials: JQuantsCredentials | null): string | undefined {
   return credentials?.apiKey;
 }
 
-/** 接続テスト（APIキー認証の疎通確認）。 */
+/** 接続テスト（APIキー認証の疎通確認）。共有リミッタ（5req/分）を消費する。 */
 export async function testJQuantsConnection(
   credentials: JQuantsCredentials | null
 ): Promise<JQuantsResponse> {
+  await getJQuantsRateLimiter().acquire();
   return callApi({ action: "test", apiKey: apiKeyOf(credentials) });
 }
 
@@ -111,6 +113,8 @@ export async function fetchJQuantsSeries(
   const cached = getCachedSeries(code, from, to);
   if (cached) return { ok: true, series: cached, cached: true };
 
+  // キャッシュミス時のみ実通信 → 共有リミッタ（5req/分）を消費する。
+  await getJQuantsRateLimiter().acquire();
   const res = await callApi({ action: "series", code, from, to, apiKey: apiKeyOf(credentials) });
   if (res.ok && res.series) {
     setCachedSeries(code, from, to, res.series);

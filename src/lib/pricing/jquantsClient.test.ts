@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { testJQuantsConnection, fetchJQuantsQuotes, fetchJQuantsSeries, fetchJQuantsFins, fetchJQuantsMaster, fetchJQuantsBarsByDate } from "./jquantsClient";
+import { __setJQuantsRateLimiter } from "./rateLimiter";
 
 // ※ APIキーはダミー値のみ。実 fetch はモック。
 const DUMMY_KEY = "dummy-client-key";
@@ -17,11 +18,16 @@ function lastBody(fn: ReturnType<typeof vi.fn>): Record<string, unknown> {
   return JSON.parse((call[1] as RequestInit).body as string);
 }
 
+// 実待機を避けるため共有リミッタを no-wait に差し替える。
+const limiterAcquire = vi.fn().mockResolvedValue(undefined);
 beforeEach(() => {
   window.localStorage.clear();
+  limiterAcquire.mockClear();
+  __setJQuantsRateLimiter({ acquire: limiterAcquire });
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  __setJQuantsRateLimiter(null);
 });
 
 describe("testJQuantsConnection", () => {
@@ -67,6 +73,20 @@ describe("fetchJQuantsFins", () => {
     expect(body.action).toBe("fins");
     expect(body.code).toBe("7203");
     expect(body.apiKey).toBe(DUMMY_KEY);
+  });
+});
+
+describe("共有リミッタの網羅（単発呼び出し）", () => {
+  it("testJQuantsConnection は共有リミッタを acquire する", async () => {
+    mockFetchOnce({ ok: true, status: "connected" });
+    await testJQuantsConnection({ apiKey: DUMMY_KEY });
+    expect(limiterAcquire).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetchJQuantsSeries はキャッシュミス時に acquire する", async () => {
+    mockFetchOnce({ ok: true, status: "connected", series: [{ date: "2026-04-10", close: 1, adjClose: 1, volume: 1 }] });
+    await fetchJQuantsSeries("7203", "2026-01-01", "2026-04-10", { apiKey: DUMMY_KEY });
+    expect(limiterAcquire).toHaveBeenCalledTimes(1);
   });
 });
 

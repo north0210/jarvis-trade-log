@@ -28,8 +28,10 @@ vi.mock("./screenerRepository", () => ({
 }));
 
 import { runScreener } from "./screenerRun";
+import { __setJQuantsRateLimiter } from "@/lib/pricing/rateLimiter";
 
 const DUMMY = { apiKey: "dummy-key" };
+const limiterAcquire = vi.fn().mockResolvedValue(undefined);
 
 function uEntry(code: string, over: Partial<UniverseEntry> = {}): UniverseEntry {
   return { code, name: `銘柄${code}`, nameEn: "", sector17: "", sector33: "情報通信", scaleCategory: "", market: "プライム", marketCode: "0111", prodCategory: "011", ...over };
@@ -51,6 +53,8 @@ const probeOk = (date: string): JQuantsResponse => ({ ok: true, status: "connect
 
 beforeEach(() => {
   Object.values(h).forEach((fn) => fn.mockReset());
+  limiterAcquire.mockClear();
+  __setJQuantsRateLimiter({ acquire: limiterAcquire }); // probe の acquire を no-wait 化
 });
 
 describe("runScreener（Stage 4b オーケストレーション）", () => {
@@ -129,5 +133,33 @@ describe("runScreener（Stage 4b オーケストレーション）", () => {
     expect(r.message).toContain("財務未取得");
     const missing = r.snapshot!.rows.find((x) => x.code === "9984")!;
     expect(missing.fundamentalsAvailable).toBe(false);
+  });
+
+  it("診断: bars レート制限は理由＋フェーズを表示（時間をおいて再試行）", async () => {
+    h.fetchUniverse.mockResolvedValue({ universe: [uEntry("7203")], stopped: null });
+    h.fetchBarsBatch.mockResolvedValue(batchResult(["7203"], "rate"));
+    const r = await runScreener(DUMMY, { anchorDate: "2026-04-10" });
+    expect(r.stopped).toBe("rate");
+    expect(r.message).toContain("レート制限");
+    expect(r.message).toContain("価格系列");
+    expect(r.message).toContain("再試行");
+    expect(h.saveSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("診断: probe レート制限は『最新日検出』フェーズを表示", async () => {
+    h.probe.mockResolvedValue({ ok: false, status: "error", reason: "rate", message: "レート制限" });
+    const r = await runScreener(DUMMY); // anchorDate 省略 → probe 実行
+    expect(r.stopped).toBe("rate");
+    expect(r.message).toContain("最新日検出");
+    expect(r.message).toContain("レート制限");
+  });
+
+  it("網羅: probe は共有リミッタを acquire する", async () => {
+    h.probe.mockResolvedValue(probeOk("2026-04-10"));
+    h.fetchUniverse.mockResolvedValue({ universe: [uEntry("7203")], stopped: null });
+    h.fetchBarsBatch.mockResolvedValue(batchResult(["7203"]));
+    h.fetchBulk.mockResolvedValue(bulk({ items: [{ code: "7203", fundamentals: fund({ per: 15 }) }] }));
+    await runScreener(DUMMY); // anchorDate 省略 → probe 経路
+    expect(limiterAcquire).toHaveBeenCalledTimes(1); // probe の1回（universe/bars/fins はモックで acquire しない）
   });
 });
