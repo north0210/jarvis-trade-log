@@ -4,10 +4,12 @@
  * Phase 46: 送信イベントを履歴レコードとして記録（既読管理・保持期間クリーンアップ）。
  */
 import type { VolumeAlert } from "@/lib/alerts/volume-alerts";
+import { K } from "@/lib/storage/keys";
 
-const SETTINGS_KEY = "jarvis-trade-log:notification-settings";
-const HISTORY_KEY = "jarvis-trade-log:notification-history";
-const RETENTION_KEY = "jarvis-trade-log:notification-retention";
+const SETTINGS_KEY = K.notificationSettings;
+// 注意: 履歴キーの refName は "notifications"（backupKey 由来）。notification-history に対応する。
+const HISTORY_KEY = K.notifications;
+const RETENTION_KEY = K.notificationRetention;
 
 export type NotificationType = "report" | "discipline" | "volume" | "risk" | "system";
 export type NotificationLevel = "info" | "warning" | "danger";

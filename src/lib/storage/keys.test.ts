@@ -190,6 +190,22 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
   it("K が要注意帯②を正しく指す（6-1 変換対象）", () => {
     expect(K.primaryStrategy).toBe("jarvis-trade-log:primary-strategy");
   });
+
+  it("K が要注意帯③(notification 3キー)を正しく指す（6-1 変換対象）", () => {
+    expect(K.notificationSettings).toBe("jarvis-trade-log:notification-settings");
+    expect(K.notificationRetention).toBe("jarvis-trade-log:notification-retention");
+    // ⚠️ 重要: 履歴キーの refName は backupKey 由来の "notifications"。
+    // storageKey は notification-history。将来の読み手が混同しないよう明示固定する。
+    expect(K.notifications).toBe("jarvis-trade-log:notification-history");
+  });
+
+  it("K が要注意帯④(watchlist 3キー)を正しく指す（6-1 変換対象）", () => {
+    expect(K.watchlistSettings).toBe("jarvis-trade-log:watchlist-settings");
+    expect(K.watchlistPrev).toBe("jarvis-trade-log:watchlist-prev");
+    // ⚠️ 重要: 検出履歴キーの refName は backupKey 由来の "watchlistEvents"。
+    // storageKey は watchlist-detections。将来の読み手が混同しないよう明示固定する。
+    expect(K.watchlistEvents).toBe("jarvis-trade-log:watchlist-detections");
+  });
 });
 
 describe("refName（A-1: 参照識別子）の固定化", () => {

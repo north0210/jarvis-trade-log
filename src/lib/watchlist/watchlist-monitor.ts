@@ -21,10 +21,12 @@ import { getBacktestSummaries } from "@/lib/analytics/backtest-engine";
 import { buildAdvisorReport } from "@/lib/advisor/advisor-engine";
 import { getPerStockBacktestMap } from "@/lib/advisor/advisor-provider";
 import { notify } from "@/lib/notifications/notification-service";
+import { K } from "@/lib/storage/keys";
 
-const SETTINGS_KEY = "jarvis-trade-log:watchlist-settings";
-const PREV_KEY = "jarvis-trade-log:watchlist-prev";
-const HIST_KEY = "jarvis-trade-log:watchlist-detections";
+const SETTINGS_KEY = K.watchlistSettings;
+const PREV_KEY = K.watchlistPrev;
+// 注意: 検出履歴キーの refName は "watchlistEvents"（backupKey 由来）。watchlist-detections に対応する。
+const HIST_KEY = K.watchlistEvents;
 
 export interface WatchlistSettings {
   enabled: boolean;
