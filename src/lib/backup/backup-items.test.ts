@@ -4,7 +4,7 @@ import { KEY_REGISTRY } from "@/lib/storage/keys";
 
 /**
  * BACKUP_ITEMS 固定化テスト（必須1a）。
- * keys.ts の中央レジストリから導出された結果が「旧32キー + 今回追加4キー = 36」
+ * keys.ts の中央レジストリから導出された結果が「旧32キー + 追加 = 37」
  * と一致することをスナップショット的に固定する。将来の意図しない増減を検知する。
  */
 
@@ -46,6 +46,7 @@ const LEGACY_36_MINUS_4 = [
 
 // 今回追加（必須1a）
 const ADDED_4 = [
+  "jarvis-trade-log:screener-auto-settings",
   "jarvis-trade-log:backtest-v2-results",
   "jarvis-trade-log:cache-policy",
   "jarvis-trade-log:price-provider-mode",
@@ -55,10 +56,10 @@ const ADDED_4 = [
 const EXPECTED_36 = [...LEGACY_36_MINUS_4, ...ADDED_4].sort();
 
 describe("BACKUP_ITEMS 導出（keys.ts レジストリから）", () => {
-  it("対象は旧32キー + 追加4キー = 36キーで一致（スナップショット固定）", () => {
+  it("対象は 37キーで一致（スナップショット固定）", () => {
     const actual = BACKUP_ITEMS.map((i) => i.storageKey).sort();
     expect(actual).toEqual(EXPECTED_36);
-    expect(actual.length).toBe(36);
+    expect(actual.length).toBe(37);
   });
 
   it("追加4キーが確実に含まれる", () => {

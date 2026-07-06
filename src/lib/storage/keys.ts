@@ -94,6 +94,7 @@ const RAW_KEY_REGISTRY: Omit<KeyDef, "refName">[] = [
   { storageKey: "jarvis-trade-log:threshold-settings", backupKey: "thresholdSettings", label: "通知しきい値", kind: "value", unit: "settings", includeInBackup: true },
   { storageKey: "jarvis-trade-log:adaptive-score-settings", backupKey: "adaptiveScoreSettings", label: "適応スコア設定", kind: "value", unit: "settings", includeInBackup: true },
   { storageKey: "jarvis-trade-log:auto-report-settings", backupKey: "autoReportSettings", label: "レポート自動保存設定", kind: "value", unit: "settings", includeInBackup: true },
+  { storageKey: "jarvis-trade-log:screener-auto-settings", backupKey: "screenerAutoSettings", label: "スクリーナー自動更新設定", kind: "value", unit: "settings", includeInBackup: true },
   { storageKey: "jarvis-trade-log:ai-comment-settings", backupKey: "aiCommentSettings", label: "AIコメント設定", kind: "value", unit: "settings", includeInBackup: true },
   { storageKey: "jarvis-trade-log:auto-update-settings", backupKey: "autoUpdateSettings", label: "自動更新設定", kind: "value", unit: "settings", includeInBackup: true },
   { storageKey: "jarvis-trade-log:cash-position", backupKey: "cashPosition", label: "現金ポジション", kind: "value", unit: "settings", includeInBackup: true },

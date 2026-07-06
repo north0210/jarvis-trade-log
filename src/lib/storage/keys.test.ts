@@ -57,6 +57,7 @@ const EXPECTED_KEYS = [
   "jarvis-trade-log:release-checklist",
   "jarvis-trade-log:report-snapshots",
   "jarvis-trade-log:rule-improvements",
+  "jarvis-trade-log:screener-auto-settings",
   "jarvis-trade-log:screener-snapshot",
   "jarvis-trade-log:settings",
   "jarvis-trade-log:simulations",
@@ -73,21 +74,21 @@ const EXPECTED_KEYS = [
 ];
 
 describe("KEY_REGISTRY: キー集合のスナップショット固定", () => {
-  it("全 storageKey が期待リスト（45エントリ）と過不足なく一致", () => {
+  it("全 storageKey が期待リスト（49エントリ）と過不足なく一致", () => {
     const actual = KEY_REGISTRY.map((k) => k.storageKey).sort();
     expect(actual).toEqual(EXPECTED_KEYS);
   });
 
-  it("エントリ総数 = 48（具体キー47 + 動的プレフィックス1）", () => {
-    expect(KEY_REGISTRY.length).toBe(48);
-    expect(EXPECTED_KEYS.length).toBe(48);
+  it("エントリ総数 = 49（具体キー48 + 動的プレフィックス1）", () => {
+    expect(KEY_REGISTRY.length).toBe(49);
+    expect(EXPECTED_KEYS.length).toBe(49);
   });
 
   it("動的プレフィックスは price-cache: のみ（それ以外は具体キー）", () => {
     const prefixEntries = KEY_REGISTRY.map((k) => k.storageKey).filter((k) => k.endsWith(":"));
     expect(prefixEntries).toEqual([PRICE_CACHE_PREFIX]);
-    // 具体キー数 = 47
-    expect(KEY_REGISTRY.length - prefixEntries.length).toBe(47);
+    // 具体キー数 = 48
+    expect(KEY_REGISTRY.length - prefixEntries.length).toBe(48);
   });
 });
 
@@ -129,9 +130,9 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
     }
   });
 
-  it("K は全キー（refName ベース・48エントリ）を収録", () => {
+  it("K は全キー（refName ベース・49エントリ）を収録", () => {
     expect(Object.keys(K).length).toBe(KEY_REGISTRY.length);
-    expect(Object.keys(K).length).toBe(48);
+    expect(Object.keys(K).length).toBe(49);
   });
 
   it("K の全値が jarvis-trade-log: プレフィックスを持つ", () => {
@@ -247,6 +248,10 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
   it("K がスクリーナー新キー（regenerable）を正しく指す", () => {
     expect(K.marketUniverse).toBe("jarvis-trade-log:market-universe");
     expect(K.screenerSnapshot).toBe("jarvis-trade-log:screener-snapshot");
+  });
+
+  it("K がスクリーナー自動更新設定キーを正しく指す", () => {
+    expect(K.screenerAutoSettings).toBe("jarvis-trade-log:screener-auto-settings");
   });
 });
 

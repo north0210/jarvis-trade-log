@@ -136,6 +136,23 @@ describe("runScreener（Stage 4b オーケストレーション）", () => {
     expect(missing.fundamentalsAvailable).toBe(false);
   });
 
+  it("reuseFundamentals: 再利用 code は fins 取得をスキップ（日次差分）", async () => {
+    h.fetchUniverse.mockResolvedValue({ universe: [uEntry("7203"), uEntry("9984")], stopped: null });
+    h.fetchBarsBatch.mockResolvedValue(batchResult(["7203", "9984"]));
+    h.fetchBulk.mockResolvedValue(bulk({ items: [{ code: "9984", fundamentals: fund({ per: 30 }) }] }));
+    const reuse = new Map([["7203", fund({ per: 15, roe: 25, basis: "FY", asOf: "2026-06-01" })]]);
+    const r = await runScreener(DUMMY, { anchorDate: "2026-04-10", reuseFundamentals: reuse });
+    expect(r.ok).toBe(true);
+    // 9984 のみ fetch（7203 は再利用）
+    const fetchedCodes = h.fetchBulk.mock.calls[0][0] as string[];
+    expect(fetchedCodes).toEqual(["9984"]);
+    // 両方 fundamentals あり
+    expect(r.finsCovered).toBe(2);
+    const reused = r.snapshot!.rows.find((x) => x.code === "7203")!;
+    expect(reused.per).toBe(15);
+    expect(reused.fundamentalsAvailable).toBe(true);
+  });
+
   it("診断: bars レート制限は理由＋フェーズを表示（時間をおいて再試行）", async () => {
     h.fetchUniverse.mockResolvedValue({ universe: [uEntry("7203")], stopped: null });
     h.fetchBarsBatch.mockResolvedValue(batchResult(["7203"], "rate"));

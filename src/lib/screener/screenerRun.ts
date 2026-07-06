@@ -19,6 +19,7 @@ import { filterCommonStocks } from "./universe";
 import { buildScreenerRows, selectTopN, rescoreWithFundamentals, rankRows } from "./technical";
 import { saveUniverse, saveScreenerSnapshot, type ScreenerSnapshot } from "./screenerRepository";
 import type { JQuantsCredentials, BulkStop } from "@/lib/pricing/provider";
+import type { Fundamentals } from "@/lib/pricing/fundamentals";
 
 export type ScreenerPhase = "universe" | "bars" | "fins";
 /** 診断用の全フェーズ（probe を含む）。 */
@@ -56,6 +57,11 @@ export interface ScreenerRunOptions {
   topNFins?: number;
   /** カバレッジ内のアンカー日。省略時は probe で最新取得可能日を自動判定。 */
   anchorDate?: string;
+  /**
+   * 再利用する財務（日次自動更新用）。上位Nのうちこのマップに含まれる code は
+   * fins を再取得せず再利用する（財務は四半期更新のため）。
+   */
+  reuseFundamentals?: Map<string, Fundamentals>;
 }
 
 export interface ScreenerRunResult {
@@ -123,21 +129,24 @@ export async function runScreener(
   const top = selectTopN(rows, topNFins);
   if (top.length === 0) return discard(null, "対象銘柄がありません。");
 
-  // 4) 上位のみ fins（auth/aborted は破棄・rate/欠損は部分許容）
+  // 4) 上位のみ fins（再利用マップにある code はスキップ・auth/aborted は破棄・rate/欠損は部分許容）
+  const reuse = opts?.reuseFundamentals;
+  const fetchCodes = top.map((r) => r.code).filter((c) => !reuse?.has(c));
   const priceByCode = new Map(top.map((r) => [r.code, r.price]));
   const provider = getFundamentalsProvider("jquants-ready", credentials);
-  const fund = await provider.fetchFundamentalsBulk(
-    top.map((r) => r.code),
-    priceByCode,
-    { signal, onProgress: (p) => opts?.onProgress?.("fins", p.done, p.total) }
-  );
+  const fund = fetchCodes.length
+    ? await provider.fetchFundamentalsBulk(fetchCodes, priceByCode, {
+        signal,
+        onProgress: (p) => opts?.onProgress?.("fins", p.done, p.total),
+      })
+    : { items: [], failedCodes: [], stopped: null as BulkStop | null };
   if (fund.stopped === "auth" || fund.stopped === "aborted") {
     return discard(fund.stopped, stopMessage("fins", fund.stopped));
   }
 
-  // 5) フルスコア再算出（未取得は技術のみで残留・fundamentalsAvailable=false）
-  const byCode = new Map(fund.items.map((i) => [i.code, i.fundamentals]));
-  const ranked = rankRows(top.map((r) => rescoreWithFundamentals(r, byCode.get(r.code) ?? null)));
+  // 5) フルスコア再算出（再利用 ?? 取得 ?? null。未取得は技術のみで残留）
+  const fetched = new Map(fund.items.map((i) => [i.code, i.fundamentals]));
+  const ranked = rankRows(top.map((r) => rescoreWithFundamentals(r, reuse?.get(r.code) ?? fetched.get(r.code) ?? null)));
   const finsCovered = ranked.filter((r) => r.fundamentalsAvailable).length;
   const finsMissing = ranked.length - finsCovered;
 

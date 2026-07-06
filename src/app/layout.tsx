@@ -4,6 +4,7 @@ import Nav from "@/components/Nav";
 import AutoUpdateController from "@/components/AutoUpdateController";
 import AutoReportController from "@/components/AutoReportController";
 import WatchlistController from "@/components/WatchlistController";
+import ScreenerAutoController from "@/components/ScreenerAutoController";
 import { APP_LABEL } from "@/lib/version";
 
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AutoUpdateController />
         <AutoReportController />
         <WatchlistController />
+        <ScreenerAutoController />
         <div className="max-w-7xl mx-auto px-4 pb-16">
           <header className="flex items-end justify-between py-5 border-b border-line mb-6">
             <div>

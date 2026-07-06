@@ -15,6 +15,13 @@ import { loadScreenerSnapshot, type ScreenerSnapshot } from "@/lib/screener/scre
 import type { ScreenerRow } from "@/lib/screener/technical";
 import { getStockRepository } from "@/lib/storage/stockRepository";
 import { planRegister } from "@/lib/screener/register";
+import {
+  getScreenerAutoSettings,
+  setScreenerAutoSettings,
+  subscribeScreenerAuto,
+  getScreenerAutoRuntime,
+  type ScreenerFrequency,
+} from "@/lib/screener/screenerAuto";
 
 const PHASE_LABEL: Record<ScreenerPhase, string> = {
   universe: "上場一覧",
@@ -38,13 +45,35 @@ export default function ScreenerPage() {
   const [fundOnly, setFundOnly] = useState(false);
 
   const [registered, setRegistered] = useState<Set<string>>(new Set());
+  const [autoEnabled, setAutoEnabled] = useState(false);
+  const [autoFreq, setAutoFreq] = useState<ScreenerFrequency>("daily");
+  const [autoRuntime, setAutoRuntime] = useState(getScreenerAutoRuntime());
 
   useEffect(() => {
     setSnap(loadScreenerSnapshot());
     getStockRepository()
       .list()
       .then((stocks) => setRegistered(new Set(stocks.map((s) => s.code))));
+    const a = getScreenerAutoSettings();
+    setAutoEnabled(a.enabled);
+    setAutoFreq(a.frequency);
+    // 自動更新の実行状況を購読（完了時に snapshot を再読込）
+    const unsub = subscribeScreenerAuto(() => {
+      const rt = getScreenerAutoRuntime();
+      setAutoRuntime(rt);
+      if (!rt.running) setSnap(loadScreenerSnapshot());
+    });
+    return unsub;
   }, []);
+
+  const toggleAuto = (enabled: boolean) => {
+    setAutoEnabled(enabled);
+    setScreenerAutoSettings({ enabled });
+  };
+  const changeFreq = (frequency: ScreenerFrequency) => {
+    setAutoFreq(frequency);
+    setScreenerAutoSettings({ frequency });
+  };
 
   const addToWatchlist = async (row: ScreenerRow) => {
     if (!snap) return;
@@ -124,6 +153,32 @@ export default function ScreenerPage() {
         {msg && (
           <p className={`text-sm font-mono mt-2 ${msg.tone === "ok" ? "text-profit" : "text-danger"}`}>{msg.text}</p>
         )}
+      </section>
+
+      <section className="hud-panel p-4">
+        <h2 className="hud-label mb-2">◇ 自動更新（起動時チェック）</h2>
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={autoEnabled} onChange={(e) => toggleAuto(e.target.checked)} />
+            <span className="text-sm">アプリ起動時に自動更新</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="hud-label">頻度</span>
+            <select className="hud-input" value={autoFreq} onChange={(e) => changeFreq(e.target.value as ScreenerFrequency)} disabled={!autoEnabled}>
+              <option value="daily">毎日</option>
+              <option value="weekly">毎週</option>
+            </select>
+          </label>
+          {autoRuntime.running && (
+            <span className="text-arc text-xs">
+              自動更新中… {autoRuntime.phase === "probe" ? "確認" : autoRuntime.phase === "universe" ? "上場一覧" : autoRuntime.phase === "bars" ? "価格系列" : "財務指標"} {autoRuntime.done}/{autoRuntime.total}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-arcdim mt-2">
+          起動時に前回より新しい取得可能日があれば自動でランキングを更新します（bars はフル再取得・財務は再利用）。既定 OFF。
+          <strong className="text-caution"> Free プランでは約12週遅延データのため鮮度向上は限定的です。最新化には Light 以上をご検討ください。</strong>
+        </p>
       </section>
 
       {!snap ? (
