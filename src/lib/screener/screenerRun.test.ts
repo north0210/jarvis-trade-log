@@ -75,6 +75,7 @@ describe("runScreener（Stage 4b オーケストレーション）", () => {
     expect(r.stopped).toBeNull();
     // ETF(13060) はフィルタ除外 → universeCount=2
     expect(r.snapshot?.universeCount).toBe(2);
+    expect(r.snapshot?.priceAsOf).toBe("2026-04-10"); // アンカー日を保持
     expect(r.finsCovered).toBe(2);
     expect(h.saveSnapshot).toHaveBeenCalledTimes(1);
     // rows に basis / asOf / available を含む

@@ -13,6 +13,8 @@ import { getProviderMode, getJQuantsCredentials } from "@/lib/pricing/settings";
 import { runScreener, type ScreenerPhase } from "@/lib/screener/screenerRun";
 import { loadScreenerSnapshot, type ScreenerSnapshot } from "@/lib/screener/screenerRepository";
 import type { ScreenerRow } from "@/lib/screener/technical";
+import { getStockRepository } from "@/lib/storage/stockRepository";
+import { planRegister } from "@/lib/screener/register";
 
 const PHASE_LABEL: Record<ScreenerPhase, string> = {
   universe: "上場一覧",
@@ -35,9 +37,23 @@ export default function ScreenerPage() {
   const [fGrade, setFGrade] = useState("");
   const [fundOnly, setFundOnly] = useState(false);
 
+  const [registered, setRegistered] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     setSnap(loadScreenerSnapshot());
+    getStockRepository()
+      .list()
+      .then((stocks) => setRegistered(new Set(stocks.map((s) => s.code))));
   }, []);
+
+  const addToWatchlist = async (row: ScreenerRow) => {
+    if (!snap) return;
+    const plan = planRegister(row, registered, { priceAsOf: snap.priceAsOf, generatedAt: snap.generatedAt });
+    if (plan.skip || !plan.input) return;
+    await getStockRepository().create(plan.input);
+    setRegistered((prev) => new Set(prev).add(row.code)); // 即「登録済み」へ
+    setMsg({ tone: "ok", text: `${row.name}（${row.code}）をウォッチリストに追加しました。` });
+  };
 
   const run = async () => {
     if (getProviderMode() === "manual") {
@@ -144,7 +160,7 @@ export default function ScreenerPage() {
             <thead>
               <tr className="hud-label text-left">
                 {["#", "コード", "銘柄名", "セクター", "市場", "現在値", "RSI", "MACD",
-                  <HelpTooltip key="sc" termKey="pf" label="スコア" />, "評価", "PER", "PBR", "ROE", "営業%", "売上成長%", "財務", ""].map((h, i) => (
+                  <HelpTooltip key="sc" termKey="pf" label="スコア" />, "評価", "PER", "PBR", "ROE", "営業%", "売上成長%", "財務", "登録", ""].map((h, i) => (
                   <th key={i} className="pb-2 pr-3 font-normal">{h}</th>
                 ))}
               </tr>
@@ -171,6 +187,13 @@ export default function ScreenerPage() {
                     {r.fundamentalsAvailable
                       ? `${r.fundamentalsBasis === "FY" ? "本決算" : r.fundamentalsBasis === "quarter" ? "四半期" : ""}${r.fundamentalsAsOf ? ` ${r.fundamentalsAsOf.slice(0, 10)}` : ""}`
                       : "未取得"}
+                  </td>
+                  <td className="py-1 pr-3">
+                    {registered.has(r.code) ? (
+                      <span className="text-arcdim text-xs">登録済み</span>
+                    ) : (
+                      <button className="hud-btn text-xs px-2 py-0.5" onClick={() => addToWatchlist(r)}>+ 追加</button>
+                    )}
                   </td>
                   <td className="py-1 pr-3">
                     <Link href="/stocks" className="hud-btn text-xs px-2 py-0.5">銘柄管理へ</Link>

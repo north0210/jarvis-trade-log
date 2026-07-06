@@ -144,6 +144,7 @@ export async function runScreener(
   // 6) snapshot 永続化（ここまで到達＝ stopped は null か "rate"＝部分許容）
   const snapshot: ScreenerSnapshot = {
     generatedAt: new Date().toISOString(),
+    priceAsOf: anchor, // 現在値のアンカー日（登録時の price_updated_at に使用）
     universeCount,
     rows: ranked,
   };

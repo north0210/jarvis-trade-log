@@ -16,6 +16,8 @@ const SNAPSHOT_KEY = K.screenerSnapshot;
 export interface ScreenerSnapshot {
   /** 生成日時（ISO）。「いつ時点」を表示するため。 */
   generatedAt: string;
+  /** 価格系列のアンカー日（現在値の as-of。ウォッチリスト登録の price_updated_at に使用）。 */
+  priceAsOf?: string;
   /** 生成時のユニバース件数（「何社中」を表示するため）。 */
   universeCount: number;
   /** Top-N ランキング。 */

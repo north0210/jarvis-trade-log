@@ -8,15 +8,32 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { loadScreenerSnapshot, type ScreenerSnapshot } from "@/lib/screener/screenerRepository";
+import { getStockRepository } from "@/lib/storage/stockRepository";
+import { planRegister } from "@/lib/screener/register";
+import type { ScreenerRow } from "@/lib/screener/technical";
 
 export default function ScreenerTop10Widget() {
   const [snap, setSnap] = useState<ScreenerSnapshot | null>(null);
   const [ready, setReady] = useState(false);
+  const [registered, setRegistered] = useState<Set<string>>(new Set());
+  const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
     setSnap(loadScreenerSnapshot());
     setReady(true);
+    getStockRepository()
+      .list()
+      .then((stocks) => setRegistered(new Set(stocks.map((s) => s.code))));
   }, []);
+
+  const addToWatchlist = async (row: ScreenerRow) => {
+    if (!snap) return;
+    const plan = planRegister(row, registered, { priceAsOf: snap.priceAsOf, generatedAt: snap.generatedAt });
+    if (plan.skip || !plan.input) return;
+    await getStockRepository().create(plan.input);
+    setRegistered((prev) => new Set(prev).add(row.code));
+    setMsg(`${row.name}（${row.code}）を追加しました。`);
+  };
 
   if (!ready) return null;
 
@@ -40,7 +57,7 @@ export default function ScreenerTop10Widget() {
           <table className="w-full text-sm font-mono whitespace-nowrap">
             <thead>
               <tr className="hud-label text-left">
-                {["#", "コード", "銘柄名", "スコア", "評価", "財務", ""].map((h, i) => (
+                {["#", "コード", "銘柄名", "スコア", "評価", "財務", "登録", ""].map((h, i) => (
                   <th key={i} className="pb-2 pr-3 font-normal">{h}</th>
                 ))}
               </tr>
@@ -59,6 +76,13 @@ export default function ScreenerTop10Widget() {
                       : "財務未取得"}
                   </td>
                   <td className="py-1 pr-3">
+                    {registered.has(r.code) ? (
+                      <span className="text-arcdim text-xs">登録済み</span>
+                    ) : (
+                      <button className="hud-btn text-xs px-2 py-0.5" onClick={() => addToWatchlist(r)}>+ 追加</button>
+                    )}
+                  </td>
+                  <td className="py-1 pr-3">
                     <Link href="/stocks" className="hud-btn text-xs px-2 py-0.5">銘柄管理へ</Link>
                   </td>
                 </tr>
@@ -67,6 +91,7 @@ export default function ScreenerTop10Widget() {
           </table>
         </>
       )}
+      {msg && <p className="text-profit text-xs mt-2 font-mono">{msg}</p>}
       <p className="text-xs text-arcdim mt-2">※ 判断補助であり投資助言ではありません。財務は決算開示ベース（遅延あり）。</p>
     </section>
   );
