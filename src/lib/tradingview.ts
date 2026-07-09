@@ -41,3 +41,13 @@ export function normalizeTseCode(code: string): string {
 export function tradingViewSymbol(code: string): string {
   return `TSE:${normalizeTseCode(code)}`;
 }
+
+/**
+ * 個別銘柄の TradingView チャートページ URL（外部リンク用）。
+ *
+ * 無料の埋め込みウィジェットは日本の個別株データに非対応のため、
+ * TradingView サイト側で開く外部リンクを生成する（4桁正規化を再利用）。
+ */
+export function tradingViewChartUrl(code: string): string {
+  return `https://jp.tradingview.com/chart/?symbol=${tradingViewSymbol(code)}`;
+}

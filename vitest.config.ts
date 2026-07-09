@@ -12,8 +12,10 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  // JSX は自動ランタイム（React 17+）で変換する（コンポーネント描画テスト用・Next と同挙動）。
+  esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
   },
 });
