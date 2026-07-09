@@ -4,8 +4,8 @@ import {
   acquireServerToken,
   __resetServerLimiters,
   __setServerLimiterFactory,
-  SERVER_LIMITER_CAPACITY,
-  SERVER_LIMITER_REFILL_MS,
+  JQUANTS_RATE_CAPACITY,
+  JQUANTS_RATE_REFILL_MS,
 } from "./serverRateLimiter";
 
 // ※ APIキーはダミー値のみ。
@@ -21,9 +21,9 @@ afterEach(() => {
 });
 
 describe("serverRateLimiter（APIキー単位・プロセス内）", () => {
-  it("設定はバースト無し・4req/分（余裕）", () => {
-    expect(SERVER_LIMITER_CAPACITY).toBe(1);
-    expect(SERVER_LIMITER_REFILL_MS).toBe(15_000);
+  it("一元定義: バースト無し・refill=2000ms（≈30req/分）", () => {
+    expect(JQUANTS_RATE_CAPACITY).toBe(1);
+    expect(JQUANTS_RATE_REFILL_MS).toBe(2_000);
   });
 
   it("同一キーは同一バケットを再利用（間隔が効く）", async () => {

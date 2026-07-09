@@ -27,6 +27,7 @@ import {
   buildFinsUrl,
   buildMasterUrl,
   buildBarsByDateUrl,
+  buildCalendarUrl,
   mapDailyBars,
   deriveQuote,
   resolveApiKey,
@@ -35,6 +36,7 @@ import {
   type V2DailyBar,
   type V2FinRecord,
   type V2MasterRecord,
+  type V2CalendarRecord,
   type InternalBar,
 } from "@/lib/pricing/jquantsV2";
 
@@ -210,7 +212,7 @@ export async function POST(req: Request) {
   } catch {
     body = {};
   }
-  const KNOWN_ACTIONS = ["quotes", "series", "fins", "master", "bars-by-date"];
+  const KNOWN_ACTIONS = ["quotes", "series", "fins", "master", "bars-by-date", "calendar"];
   const action = KNOWN_ACTIONS.includes(body.action ?? "") ? (body.action as string) : "test";
   const { key: apiKey, source: keySource } = resolveApiKey(process.env.JQUANTS_API_KEY, body.apiKey);
 
@@ -272,6 +274,17 @@ export async function POST(req: Request) {
       if (r.status === 429) return rateFail();
       if (r.status !== 200) return otherFail(r.status, r.detail ?? "", "上場マスタ取得に失敗しました");
       return NextResponse.json({ ok: true, status: "connected", master: r.rows, pages: r.pages });
+    }
+
+    // 取引カレンダー（from/to・全ページ収集）。
+    if (action === "calendar") {
+      const from = typeof body.from === "string" && body.from ? body.from : undefined;
+      const to = typeof body.to === "string" && body.to ? body.to : undefined;
+      const r = await fetchAllRows<V2CalendarRecord>((pk) => buildCalendarUrl({ from, to, paginationKey: pk }), apiKey);
+      if (r.status === 401 || r.status === 403) return authFail(r.status, r.detail ?? "");
+      if (r.status === 429) return rateFail();
+      if (r.status !== 200) return otherFail(r.status, r.detail ?? "", "取引カレンダー取得に失敗しました");
+      return NextResponse.json({ ok: true, status: "connected", calendar: r.rows, pages: r.pages });
     }
 
     // 日付一括の全銘柄株価（code 省略）。カバレッジ外の date は終端へクランプして再試行。

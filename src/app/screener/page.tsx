@@ -11,6 +11,8 @@ import PageIntro from "@/components/PageIntro";
 import HelpTooltip from "@/components/HelpTooltip";
 import { getProviderMode, getJQuantsCredentials } from "@/lib/pricing/settings";
 import { runScreener, type ScreenerPhase } from "@/lib/screener/screenerRun";
+import { resolveExpectedAsOf, isDataStale, type ExpectedAsOfSource } from "@/lib/pricing/calendar";
+import { JQUANTS_EFFECTIVE_RPM } from "@/lib/pricing/serverRateLimiter";
 import { loadScreenerSnapshot, type ScreenerSnapshot } from "@/lib/screener/screenerRepository";
 import type { ScreenerRow } from "@/lib/screener/technical";
 import { getStockRepository } from "@/lib/storage/stockRepository";
@@ -48,9 +50,14 @@ export default function ScreenerPage() {
   const [autoEnabled, setAutoEnabled] = useState(false);
   const [autoFreq, setAutoFreq] = useState<ScreenerFrequency>("daily");
   const [autoRuntime, setAutoRuntime] = useState(getScreenerAutoRuntime());
+  // 期待される最新データ日（取引カレンダー由来 / 未取得時は静的推定）。
+  // 時刻・localStorage 依存のためマウント後にクライアントで算出（hydration 齟齬回避）。
+  const [freshness, setFreshness] = useState<{ expected: string; source: ExpectedAsOfSource } | null>(null);
 
   useEffect(() => {
     setSnap(loadScreenerSnapshot());
+    const f = resolveExpectedAsOf(new Date());
+    setFreshness({ expected: f.date, source: f.source });
     getStockRepository()
       .list()
       .then((stocks) => setRegistered(new Set(stocks.map((s) => s.code))));
@@ -106,6 +113,8 @@ export default function ScreenerPage() {
   };
 
   const rows = useMemo(() => snap?.rows ?? [], [snap]);
+  // snapshot の価格データ日（priceAsOf）が期待鮮度に達しているか（要更新表示用）。
+  const dataStale = useMemo(() => (snap?.priceAsOf ? isDataStale(snap.priceAsOf, new Date()) : null), [snap]);
   const markets = useMemo(() => Array.from(new Set(rows.map((r) => r.market).filter(Boolean))).sort(), [rows]);
   const sectors = useMemo(() => Array.from(new Set(rows.map((r) => r.sector).filter(Boolean))).sort(), [rows]);
   const grades = useMemo(() => Array.from(new Set(rows.map((r) => r.grade))).sort(), [rows]);
@@ -147,7 +156,7 @@ export default function ScreenerPage() {
           )}
         </div>
         <p className="text-xs text-caution mt-2">
-          ⚠ 初回・全更新は<strong>約18分</strong>かかります（無料プランは 5リクエスト/分・全営業日ぶんを順次取得）。
+          ⚠ 初回・全更新は<strong>数分程度</strong>かかります（約{JQUANTS_EFFECTIVE_RPM}リクエスト/分・全営業日ぶんを順次取得）。
           実行中は「中断」で安全に停止できます（中断時は保存されません）。
         </p>
         {msg && (
@@ -177,19 +186,36 @@ export default function ScreenerPage() {
         </div>
         <p className="text-xs text-arcdim mt-2">
           起動時に前回より新しい取得可能日があれば自動でランキングを更新します（bars はフル再取得・財務は再利用）。既定 OFF。
-          <strong className="text-caution"> Free プランでは約12週遅延データのため鮮度向上は限定的です。最新化には Light 以上をご検討ください。</strong>
+          {freshness && (
+            <strong className="text-arc">
+              {" "}期待される最新データ: {freshness.expected} 時点
+              {freshness.source === "static"
+                ? "（暫定・取引カレンダー未取得。土日のみ判定）"
+                : freshness.source === "calendar-stale"
+                ? "（取引カレンダーは期限切れ・流用中）"
+                : "（取引カレンダー準拠）"}
+              。
+            </strong>
+          )}
         </p>
       </section>
 
       {!snap ? (
         <section className="hud-panel p-4">
-          <p className="text-arcdim text-sm">まだ実行されていません。「スクリーニング更新」を押してください（初回は約18分）。</p>
+          <p className="text-arcdim text-sm">まだ実行されていません。「スクリーニング更新」を押してください（初回は数分程度）。</p>
         </section>
       ) : (
         <section className="hud-panel p-4 overflow-x-auto">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-            <h2 className="hud-label">
-              ランキング（{snap.generatedAt.slice(0, 10)} 時点・{snap.universeCount}社中／表示 {filtered.length}件）
+            <h2 className="hud-label flex items-center gap-2">
+              <span>
+                ランキング（データ {snap.priceAsOf} 時点・{snap.universeCount}社中／表示 {filtered.length}件）
+              </span>
+              {dataStale && (
+                <span className={`text-xs font-mono ${dataStale.stale ? "text-caution" : "text-profit"}`}>
+                  {dataStale.stale ? `● 要更新（期待 ${dataStale.expected}）` : "● 最新"}
+                </span>
+              )}
             </h2>
             <div className="flex flex-wrap gap-2 text-xs">
               <select className="hud-input" value={fMarket} onChange={(e) => setFMarket(e.target.value)}>

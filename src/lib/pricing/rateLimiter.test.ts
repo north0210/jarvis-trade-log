@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { createRateLimiter, JQUANTS_LIMITER_CAPACITY, JQUANTS_LIMITER_REFILL_MS } from "./rateLimiter";
+import { createRateLimiter } from "./rateLimiter";
+// レート枠は serverRateLimiter.ts に一元化（client/server 共有）。
+import { JQUANTS_RATE_CAPACITY, JQUANTS_RATE_REFILL_MS } from "./serverRateLimiter";
 
-describe("J-Quants 共有リミッタの設定（バースト排除・余裕）", () => {
-  it("capacity=1（初期バーストなし）・refill=15s（4req/分＜5req/分）", () => {
-    expect(JQUANTS_LIMITER_CAPACITY).toBe(1);
-    expect(JQUANTS_LIMITER_REFILL_MS).toBe(15_000);
-    // 4req/分 ≤ 5req/分（J-Quants）で余裕がある
-    expect(60_000 / JQUANTS_LIMITER_REFILL_MS).toBeLessThanOrEqual(5);
+describe("J-Quants レート枠の一元定義（client/server 共有）", () => {
+  it("capacity=1（初期バーストなし）・refill=2000ms（≈30req/分・Light）", () => {
+    expect(JQUANTS_RATE_CAPACITY).toBe(1);
+    expect(JQUANTS_RATE_REFILL_MS).toBe(2_000);
+    expect(60_000 / JQUANTS_RATE_REFILL_MS).toBe(30);
   });
 });
 

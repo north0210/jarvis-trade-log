@@ -43,6 +43,7 @@ const EXPECTED_KEYS = [
   "jarvis-trade-log:jquants-status",
   "jarvis-trade-log:jquants-token-cache",
   "jarvis-trade-log:lastBackup",
+  "jarvis-trade-log:market-calendar",
   "jarvis-trade-log:market-universe",
   "jarvis-trade-log:notification-history",
   "jarvis-trade-log:notification-retention",
@@ -74,21 +75,21 @@ const EXPECTED_KEYS = [
 ];
 
 describe("KEY_REGISTRY: キー集合のスナップショット固定", () => {
-  it("全 storageKey が期待リスト（49エントリ）と過不足なく一致", () => {
+  it("全 storageKey が期待リスト（50エントリ）と過不足なく一致", () => {
     const actual = KEY_REGISTRY.map((k) => k.storageKey).sort();
     expect(actual).toEqual(EXPECTED_KEYS);
   });
 
-  it("エントリ総数 = 49（具体キー48 + 動的プレフィックス1）", () => {
-    expect(KEY_REGISTRY.length).toBe(49);
-    expect(EXPECTED_KEYS.length).toBe(49);
+  it("エントリ総数 = 50（具体キー49 + 動的プレフィックス1）", () => {
+    expect(KEY_REGISTRY.length).toBe(50);
+    expect(EXPECTED_KEYS.length).toBe(50);
   });
 
   it("動的プレフィックスは price-cache: のみ（それ以外は具体キー）", () => {
     const prefixEntries = KEY_REGISTRY.map((k) => k.storageKey).filter((k) => k.endsWith(":"));
     expect(prefixEntries).toEqual([PRICE_CACHE_PREFIX]);
-    // 具体キー数 = 48
-    expect(KEY_REGISTRY.length - prefixEntries.length).toBe(48);
+    // 具体キー数 = 49
+    expect(KEY_REGISTRY.length - prefixEntries.length).toBe(49);
   });
 });
 
@@ -130,9 +131,9 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
     }
   });
 
-  it("K は全キー（refName ベース・49エントリ）を収録", () => {
+  it("K は全キー（refName ベース・50エントリ）を収録", () => {
     expect(Object.keys(K).length).toBe(KEY_REGISTRY.length);
-    expect(Object.keys(K).length).toBe(49);
+    expect(Object.keys(K).length).toBe(50);
   });
 
   it("K の全値が jarvis-trade-log: プレフィックスを持つ", () => {
@@ -253,6 +254,10 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
   it("K がスクリーナー自動更新設定キーを正しく指す", () => {
     expect(K.screenerAutoSettings).toBe("jarvis-trade-log:screener-auto-settings");
   });
+
+  it("K が取引カレンダーキー（regenerable）を正しく指す", () => {
+    expect(K.marketCalendar).toBe("jarvis-trade-log:market-calendar");
+  });
 });
 
 describe("refName（A-1: 参照識別子）の固定化", () => {
@@ -285,6 +290,7 @@ describe("refName（A-1: 参照識別子）の固定化", () => {
       "jarvis-trade-log:price-cache:": "priceCache",
       "jarvis-trade-log:price-update-log": "priceUpdateLog",
       "jarvis-trade-log:onboarding-done": "onboardingDone",
+      "jarvis-trade-log:market-calendar": "marketCalendar",
       "jarvis-trade-log:market-universe": "marketUniverse",
       "jarvis-trade-log:screener-snapshot": "screenerSnapshot",
     };

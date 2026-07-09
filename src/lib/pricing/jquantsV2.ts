@@ -15,6 +15,7 @@ export const JQUANTS_V2_BASE = "https://api.jquants.com/v2";
 export const DAILY_BARS_PATH = "/equities/bars/daily";
 export const FINS_SUMMARY_PATH = "/fins/summary";
 export const EQ_MASTER_PATH = "/equities/master";
+export const MARKETS_CALENDAR_PATH = "/markets/calendar";
 
 /** V2 株価四本値の 1 レコード（使用フィールドのみ。他は無視）。 */
 export interface V2DailyBar {
@@ -208,6 +209,25 @@ export interface V2FinRecord {
   EPS?: string; // 一株当たり当期純利益
   BPS?: string; // 一株当たり純資産
   ShOutFY?: string; // 期末発行済株式数
+}
+
+/**
+ * V2 取引カレンダー（/markets/calendar）の 1 レコード（生ワイヤ型）。
+ * HolDiv: 0=非営業日 / 1=営業日(通常) / 2=東証半日立会日 / 3=非営業日(祝日取引あり)。
+ */
+export interface V2CalendarRecord {
+  Date?: string; // YYYY-MM-DD
+  HolDiv?: string; // "0" | "1" | "2" | "3"
+}
+
+/** 取引カレンダーの取得 URL を組み立てる（from/to 任意・pagination_key 任意）。 */
+export function buildCalendarUrl(params: { from?: string; to?: string; paginationKey?: string }): string {
+  const q = new URLSearchParams();
+  if (params.from) q.set("from", params.from);
+  if (params.to) q.set("to", params.to);
+  if (params.paginationKey) q.set("pagination_key", params.paginationKey);
+  const qs = q.toString();
+  return `${JQUANTS_V2_BASE}${MARKETS_CALENDAR_PATH}${qs ? `?${qs}` : ""}`;
 }
 
 /** 上場銘柄マスタの取得 URL を組み立てる（date 指定・pagination_key 任意）。 */

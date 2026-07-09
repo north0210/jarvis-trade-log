@@ -7,6 +7,10 @@
  *
  * acquire(signal) は AbortSignal で中断可能（待機中に abort されると AbortError）。
  */
+// レート枠は serverRateLimiter.ts の一元定義（サーバ側＝権威）を参照する。
+// serverRateLimiter → rateLimiter（createRateLimiter）の循環になるが、
+// 本値の参照は getJQuantsRateLimiter 内（呼び出し時）のみ → module 初期化時に読まず TDZ 安全。
+import { JQUANTS_RATE_CAPACITY, JQUANTS_RATE_REFILL_MS } from "./serverRateLimiter";
 
 export interface RateLimiter {
   /** トークンを 1 消費する。無ければ補充まで待機。signal で中断可能。 */
@@ -88,17 +92,14 @@ export function createRateLimiter(opts: RateLimiterOptions): RateLimiter {
 
 // ---- J-Quants 共有リミッタ（APIキー単位） ----
 //
-// バースト排除: capacity=1（初期バーストなし）＋ refill 15s（=4req/分）で、
-// J-Quants の 5req/分（ローリング窓）に対して**余裕を持って厳密に間隔取得**する。
-// （capacity>1 は初期バースト＋補充で 5/分を超え 429 を誘発するため 1 とする。）
-export const JQUANTS_LIMITER_CAPACITY = 1;
-export const JQUANTS_LIMITER_REFILL_MS = 15_000; // 60_000 / 4（余裕）
+// バースト排除: capacity=1（初期バーストなし）で、以降は refill 間隔で通過する。
+// レート枠は serverRateLimiter.ts の一元定義を参照（先行スロットルとして同一値で間隔取得）。
 
 let shared: RateLimiter | null = null;
 
 /** J-Quants 用の共有リミッタ（bulk/single/auto-update が同一予算を消費）。 */
 export function getJQuantsRateLimiter(): RateLimiter {
-  if (!shared) shared = createRateLimiter({ capacity: JQUANTS_LIMITER_CAPACITY, refillMs: JQUANTS_LIMITER_REFILL_MS });
+  if (!shared) shared = createRateLimiter({ capacity: JQUANTS_RATE_CAPACITY, refillMs: JQUANTS_RATE_REFILL_MS });
   return shared;
 }
 

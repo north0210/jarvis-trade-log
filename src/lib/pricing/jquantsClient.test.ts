@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { testJQuantsConnection, fetchJQuantsQuotes, fetchJQuantsSeries, fetchJQuantsFins, fetchJQuantsMaster, fetchJQuantsBarsByDate } from "./jquantsClient";
+import { testJQuantsConnection, fetchJQuantsQuotes, fetchJQuantsSeries, fetchJQuantsFins, fetchJQuantsMaster, fetchJQuantsBarsByDate, fetchJQuantsCalendar } from "./jquantsClient";
 import { __setJQuantsRateLimiter } from "./rateLimiter";
 
 // ※ APIキーはダミー値のみ。実 fetch はモック。
@@ -87,6 +87,21 @@ describe("共有リミッタの網羅（単発呼び出し）", () => {
     mockFetchOnce({ ok: true, status: "connected", series: [{ date: "2026-04-10", close: 1, adjClose: 1, volume: 1 }] });
     await fetchJQuantsSeries("7203", "2026-01-01", "2026-04-10", { apiKey: DUMMY_KEY });
     expect(limiterAcquire).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("fetchJQuantsCalendar", () => {
+  it("action=calendar・from/to・apiKey を送り、calendar を返す（共有リミッタ acquire）", async () => {
+    const fn = mockFetchOnce({ ok: true, status: "connected", calendar: [{ Date: "2026-07-09", HolDiv: "1" }] });
+    const res = await fetchJQuantsCalendar("2026-04-01", "2026-07-23", { apiKey: DUMMY_KEY });
+    expect(res.ok).toBe(true);
+    expect(res.calendar).toHaveLength(1);
+    expect(limiterAcquire).toHaveBeenCalledTimes(1);
+    const body = lastBody(fn);
+    expect(body.action).toBe("calendar");
+    expect(body.from).toBe("2026-04-01");
+    expect(body.to).toBe("2026-07-23");
+    expect(body.apiKey).toBe(DUMMY_KEY);
   });
 });
 

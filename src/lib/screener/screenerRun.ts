@@ -14,6 +14,7 @@
 import { fetchJQuantsBarsByDate } from "@/lib/pricing/jquantsClient";
 import { getFundamentalsProvider } from "@/lib/pricing/fundamentalsProvider";
 import { getJQuantsRateLimiter } from "@/lib/pricing/rateLimiter";
+import { JQUANTS_EFFECTIVE_RPM } from "@/lib/pricing/serverRateLimiter";
 import { fetchUniverse, fetchBarsBatch, recentWeekdays } from "./batch";
 import { filterCommonStocks } from "./universe";
 import { buildScreenerRows, selectTopN, rescoreWithFundamentals, rankRows } from "./technical";
@@ -39,7 +40,7 @@ function reasonJp(s: BulkStop | null): string {
 /** 中断メッセージ（理由＋フェーズ）。rate は再試行を促す。 */
 function stopMessage(phase: DiagPhase, s: BulkStop | null): string {
   const base = `${PHASE_JP[phase]}フェーズで中断しました（理由: ${reasonJp(s)}）。`;
-  if (s === "rate") return base + "時間をおいて再試行してください（5リクエスト/分）。";
+  if (s === "rate") return base + `時間をおいて再試行してください（約${JQUANTS_EFFECTIVE_RPM}リクエスト/分）。`;
   if (s === "auth") return base + "設定画面で APIキーを確認してください。";
   return base;
 }
@@ -88,7 +89,7 @@ export async function runScreener(
   const topNFins = opts?.topNFins ?? 50;
 
   // 0) アンカー日（カバレッジ内の最新営業日）を決定。省略時は probe（route が終端へクランプ）。
-  //    probe も共有リミッタ（5req/分）を消費する。
+  //    probe も共有リミッタ（実効レートは JQUANTS_RATE_* 由来）を消費する。
   let anchor = opts?.anchorDate;
   if (!anchor) {
     try {

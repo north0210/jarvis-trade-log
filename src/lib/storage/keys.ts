@@ -129,6 +129,7 @@ const RAW_KEY_REGISTRY: Omit<KeyDef, "refName">[] = [
   { storageKey: "jarvis-trade-log:onboarding-done", label: "オンボーディング完了フラグ", kind: "value", unit: "settings", includeInBackup: false, excludeReason: "transient", note: "初回ガイド表示済みフラグ。喪失時は再表示されるのみ（regenerable相当のUI状態）。" },
   // スクリーナー（regenerable = バックアップ対象外。J-Quants から再取得/再計算で完全復元できるため）
   { storageKey: "jarvis-trade-log:market-universe", label: "市場ユニバース（全上場銘柄マスタ）", kind: "array", unit: "settings", includeInBackup: false, excludeReason: "regenerable", note: "J-Quants /equities/master から再取得可能。スクリーナー用の軽量マスタ。ユーザー生成物ではないためバックアップ対象外。" },
+  { storageKey: "jarvis-trade-log:market-calendar", label: "取引カレンダー（営業日集合）", kind: "value", unit: "settings", includeInBackup: false, excludeReason: "regenerable", note: "J-Quants /markets/calendar から再取得可能。鮮度判定(expectedAsOf)用・24hキャッシュ。バックアップ対象外。" },
   { storageKey: "jarvis-trade-log:screener-snapshot", label: "スクリーナー結果スナップショット", kind: "value", unit: "settings", includeInBackup: false, excludeReason: "regenerable", note: "スクリーナー再実行で再生成可能（Top-Nランキング＋生成日時＋ユニバース件数）。バックアップ対象外。" },
 ];
 

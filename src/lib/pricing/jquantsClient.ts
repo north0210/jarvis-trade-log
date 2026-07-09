@@ -8,7 +8,7 @@
  */
 import type { JQuantsCredentials } from "./provider";
 import { getCachedSeries, setCachedSeries, type SeriesPoint } from "@/lib/analytics/priceCache";
-import type { V2FinRecord, V2MasterRecord } from "./jquantsV2";
+import type { V2FinRecord, V2MasterRecord, V2CalendarRecord } from "./jquantsV2";
 import { getJQuantsRateLimiter } from "./rateLimiter";
 
 export interface JQuantsQuote {
@@ -34,6 +34,7 @@ export interface JQuantsResponse {
   fins?: V2FinRecord[];
   master?: V2MasterRecord[];
   bars?: import("./jquantsV2").V2DailyBar[];
+  calendar?: V2CalendarRecord[];
   pages?: number; // pagination の実ページ数（初回バッチ見積り用）
   date?: string; // bars-by-date で実際に取得した日付（クランプ後）
 }
@@ -77,6 +78,16 @@ export async function fetchJQuantsQuotes(
   credentials: JQuantsCredentials | null
 ): Promise<JQuantsResponse> {
   return callApi({ action: "quotes", codes, apiKey: apiKeyOf(credentials) });
+}
+
+/** 取引カレンダー（/markets/calendar）を取得する。共有リミッタ（単発）を消費。 */
+export async function fetchJQuantsCalendar(
+  from: string | undefined,
+  to: string | undefined,
+  credentials: JQuantsCredentials | null
+): Promise<JQuantsResponse> {
+  await getJQuantsRateLimiter().acquire();
+  return callApi({ action: "calendar", from, to, apiKey: apiKeyOf(credentials) });
 }
 
 /** 上場銘柄マスタ（/equities/master・date スナップショット）を取得する。 */

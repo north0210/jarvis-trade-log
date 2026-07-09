@@ -11,9 +11,20 @@
  */
 import { createRateLimiter, type RateLimiter } from "./rateLimiter";
 
-/** サーバ側もバースト無し・4req/分（余裕）で J-Quants 5req/分を厳守する。 */
-export const SERVER_LIMITER_CAPACITY = 1;
-export const SERVER_LIMITER_REFILL_MS = 15_000;
+/**
+ * J-Quants レート枠の**一元定義**（サーバ側＝権威）。
+ * client 側の共有リミッタ（rateLimiter.ts）も先行スロットルとして本値を参照する
+ * （定数を二重管理しない）。
+ *
+ * capacity=1（初期バースト無し）＋ refill=2000ms（≈30req/分）。
+ * Light プラン（当日データ・高レート）前提で従来の 15s→2s へ緩和。
+ * ※ Free 復帰や 60req/分 化はプラン検出と併せて Stage 3 で扱う。
+ */
+export const JQUANTS_RATE_CAPACITY = 1;
+export const JQUANTS_RATE_REFILL_MS = 2_000;
+
+/** 実効レート（リクエスト/分）。refill 間隔から算出（UI・診断メッセージ用）。 */
+export const JQUANTS_EFFECTIVE_RPM = Math.round(60_000 / JQUANTS_RATE_REFILL_MS);
 
 /** APIキーの非暗号ハッシュ（生キーをマップキーに使わない）。 */
 function keyId(apiKey: string): string {
@@ -23,7 +34,7 @@ function keyId(apiKey: string): string {
 }
 
 let makeLimiter: () => RateLimiter = () =>
-  createRateLimiter({ capacity: SERVER_LIMITER_CAPACITY, refillMs: SERVER_LIMITER_REFILL_MS });
+  createRateLimiter({ capacity: JQUANTS_RATE_CAPACITY, refillMs: JQUANTS_RATE_REFILL_MS });
 
 const buckets = new Map<string, RateLimiter>();
 
@@ -46,5 +57,5 @@ export function __resetServerLimiters(): void {
 /** テスト用: リミッタ生成を差し替える（決定論テスト用）。null で既定へ。 */
 export function __setServerLimiterFactory(fn: (() => RateLimiter) | null): void {
   makeLimiter =
-    fn ?? (() => createRateLimiter({ capacity: SERVER_LIMITER_CAPACITY, refillMs: SERVER_LIMITER_REFILL_MS }));
+    fn ?? (() => createRateLimiter({ capacity: JQUANTS_RATE_CAPACITY, refillMs: JQUANTS_RATE_REFILL_MS }));
 }

@@ -6,17 +6,19 @@ import type { ScreenerRunResult } from "./screenerRun";
 
 const h = vi.hoisted(() => ({
   probe: vi.fn(),
+  cal: vi.fn(),
   mode: vi.fn(() => "jquants-ready" as string),
   loadSnap: vi.fn<() => ScreenerSnapshot | null>(),
   run: vi.fn<() => Promise<ScreenerRunResult>>(),
 }));
 
-vi.mock("@/lib/pricing/jquantsClient", () => ({ fetchJQuantsBarsByDate: h.probe }));
+vi.mock("@/lib/pricing/jquantsClient", () => ({ fetchJQuantsBarsByDate: h.probe, fetchJQuantsCalendar: h.cal }));
 vi.mock("@/lib/pricing/settings", () => ({ getProviderMode: h.mode, getJQuantsCredentials: () => ({ apiKey: "dummy-key" }) }));
 vi.mock("./screenerRepository", () => ({ loadScreenerSnapshot: h.loadSnap }));
 vi.mock("./screenerRun", () => ({ runScreener: h.run }));
 
 import { __setJQuantsRateLimiter } from "@/lib/pricing/rateLimiter";
+import { expectedAsOf, saveTradingCalendar } from "@/lib/pricing/calendar";
 import {
   periodKeyOf,
   isLocked,
@@ -41,9 +43,17 @@ function snap(over: Partial<ScreenerSnapshot> = {}): ScreenerSnapshot {
   return { generatedAt: "2026-07-05T00:00:00.000Z", priceAsOf: "2026-04-09", universeCount: 3752, rows: [fRow("7203")], ...over };
 }
 
+// 2026年7月の営業日（gate の expectedAsOf を決定づけるためのカレンダー）。
+const TRADING_DAYS = [
+  "2026-07-01", "2026-07-02", "2026-07-03", "2026-07-06", "2026-07-07", "2026-07-08",
+  "2026-07-09", "2026-07-10", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17",
+];
+
 beforeEach(() => {
   window.localStorage.clear();
+  vi.spyOn(console, "warn").mockImplementation(() => {}); // 静的フォールバック warn を抑制
   h.probe.mockReset();
+  h.cal.mockReset().mockResolvedValue({ ok: false, status: "error" });
   h.mode.mockReset().mockReturnValue("jquants-ready");
   h.loadSnap.mockReset().mockReturnValue(null);
   h.run.mockReset();
@@ -119,6 +129,7 @@ describe("runScreenerAuto（オーケストレーション）", () => {
     const r = await runScreenerAuto({ now: WEEKDAY });
     expect(r.ran).toBe(true);
     expect(h.run).toHaveBeenCalledTimes(1);
+    expect(h.cal).toHaveBeenCalledTimes(1); // stale 経路 → 取引カレンダーを最新化
     // fins 再利用マップ＋probe 済みアンカーが渡る
     const runOpts = h.run.mock.calls[0][1] as { anchorDate?: string; reuseFundamentals?: Map<string, unknown> };
     expect(runOpts.anchorDate).toBe("2026-04-10");
@@ -144,6 +155,35 @@ describe("runScreenerAuto（オーケストレーション）", () => {
     expect(r).toMatchObject({ ran: false, reason: "probe-failed" });
     expect(getScreenerAutoSettings().lastCheckedPeriod).toBeNull();
     expect(getScreenerAutoSettings().lockUntil).toBeNull();
+  });
+
+  it("鮮度ゲート: 既存 snapshot が期待鮮度に達していれば probe せず fresh skip", async () => {
+    setScreenerAutoSettings({ enabled: true });
+    // カレンダーを鮮度内で投入 → expectedAsOf が確定。snapshot をその日に一致させる。
+    saveTradingCalendar({ fetchedAt: WEEKDAY.toISOString(), tradingDays: TRADING_DAYS });
+    const exp = expectedAsOf(WEEKDAY);
+    h.loadSnap.mockReturnValue(snap({ priceAsOf: exp }));
+    const r = await runScreenerAuto({ now: WEEKDAY });
+    expect(r).toMatchObject({ ran: false, reason: "fresh" });
+    expect(h.probe).not.toHaveBeenCalled(); // probe API を叩かない
+    expect(h.cal).not.toHaveBeenCalled(); // 鮮度時はカレンダー更新もしない
+    expect(h.run).not.toHaveBeenCalled();
+    expect(getScreenerAutoSettings().lastCheckedPeriod).toBe("2026-07-06");
+    expect(getScreenerAutoSettings().lockUntil).toBeNull();
+  });
+
+  it("鮮度ゲート: 期待鮮度より古い snapshot は stale → probe して更新", async () => {
+    setScreenerAutoSettings({ enabled: true });
+    saveTradingCalendar({ fetchedAt: WEEKDAY.toISOString(), tradingDays: TRADING_DAYS });
+    const exp = expectedAsOf(WEEKDAY);
+    h.loadSnap.mockReturnValue(snap({ priceAsOf: "2026-01-05" })); // 期待鮮度より大幅に古い
+    h.probe.mockResolvedValue({ ok: true, status: "connected", date: exp, bars: [], pages: 1 });
+    h.run.mockResolvedValue({ ok: true, stopped: null, snapshot: snap(), message: "完了", finsCovered: 1, finsMissing: 0 });
+    const r = await runScreenerAuto({ now: WEEKDAY });
+    expect(r.ran).toBe(true);
+    expect(h.probe).toHaveBeenCalledTimes(1);
+    // カレンダーは鮮度内 → ensureTradingCalendar は no-op（再取得しない）
+    expect(h.cal).not.toHaveBeenCalled();
   });
 
   it("runScreener 破棄 → チェック済みにしない", async () => {

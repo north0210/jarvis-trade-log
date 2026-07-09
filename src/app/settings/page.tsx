@@ -74,6 +74,7 @@ import {
   type JQuantsStatusRecord,
 } from "@/lib/pricing/settings";
 import { testJQuantsConnection } from "@/lib/pricing/jquantsClient";
+import { JQUANTS_EFFECTIVE_RPM } from "@/lib/pricing/serverRateLimiter";
 import { updateAllPrices, getLatestUpdateLog, type PriceUpdateLog } from "@/lib/pricing/priceUpdater";
 import {
   getAutoUpdateSettings,
@@ -704,7 +705,7 @@ export default function SettingsPage() {
                 <button className="hud-btn" onClick={cancelBulkUpdate}>中断</button>
                 {priceProgress && (
                   <span className="text-arc text-xs">
-                    {priceProgress.done}/{priceProgress.total} 件（5req/分で取得中）
+                    {priceProgress.done}/{priceProgress.total} 件（約{JQUANTS_EFFECTIVE_RPM}req/分で取得中）
                   </span>
                 )}
               </>

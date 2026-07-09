@@ -11,6 +11,7 @@ import { K } from "@/lib/storage/keys";
 import { fetchJQuantsBarsByDate } from "@/lib/pricing/jquantsClient";
 import { getJQuantsRateLimiter } from "@/lib/pricing/rateLimiter";
 import { getProviderMode, getJQuantsCredentials } from "@/lib/pricing/settings";
+import { isDataStale, ensureTradingCalendar } from "@/lib/pricing/calendar";
 import { loadScreenerSnapshot, type ScreenerSnapshot } from "./screenerRepository";
 import { runScreener, type ScreenerPhase } from "./screenerRun";
 import type { ScreenerRow } from "./technical";
@@ -172,6 +173,19 @@ export async function runScreenerAuto(opts?: { now?: Date; signal?: AbortSignal 
   try {
     const credentials = getJQuantsCredentials();
     const snapshot = loadScreenerSnapshot();
+
+    // 鮮度ゲート（取引カレンダー由来の expectedAsOf 判定）。
+    // 既存 snapshot が期待鮮度に届いていれば probe API を叩かず skip する。
+    //   例（Light）: 当日 16:30 配信前は「前営業日が最新」でも fresh 判定になり無駄打ちしない。
+    //   カレンダー未取得時は静的な土日判定＋2営業日 tolerance に退避（calendar.ts / Task 2-2）。
+    const staleness = isDataStale(snapshot?.priceAsOf ?? null, now);
+    if (!staleness.stale) {
+      setScreenerAutoSettings({ lastCheckedPeriod: periodKeyOf(now, settings.frequency) });
+      return { ran: false, reason: "fresh", message: `最新データ ${staleness.expected} 時点（更新不要）` };
+    }
+
+    // 更新確定 → 取引カレンダーを最新化（鮮度内なら no-op・失敗は静的判定へ退避）。
+    await ensureTradingCalendar(credentials, now);
 
     // probe: 最新アンカーを取得（共有リミッタ経由）。前進していなければフル更新しない。
     try {
