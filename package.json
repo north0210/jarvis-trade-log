@@ -6,6 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "start:prod": "next start -p 3000 -H 127.0.0.1",
+    "redeploy": "next build && launchctl kickstart -k gui/$(id -u)/com.jarvis.tradelog",
+    "service:stop": "launchctl unload ~/Library/LaunchAgents/com.jarvis.tradelog.plist",
+    "service:start": "launchctl load -w ~/Library/LaunchAgents/com.jarvis.tradelog.plist",
     "lint": "next lint",
     "test": "vitest run"
   },

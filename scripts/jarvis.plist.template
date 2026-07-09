@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  JARVIS Trade Log を macOS ログイン時に常駐（LaunchAgent）。
+  配置先: ~/Library/LaunchAgents/com.jarvis.tradelog.plist
+  詳細手順: docs/DEPLOY_launchd.md
+
+  ※ パスは環境に合わせて置換すること（既定は現行環境の値）:
+     - Node bin: /Users/hiroseosamuyuki/.local/node/bin
+     - プロジェクト: /Users/hiroseosamuyuki/projects/jarvis-trade-log
+  KeepAlive は SuccessfulExit=false（クラッシュ時のみ再起動・手動 service:stop と競合しない）。
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jarvis.tradelog</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/hiroseosamuyuki/.local/node/bin/npm</string>
+    <string>run</string>
+    <string>start:prod</string>
+  </array>
+
+  <key>WorkingDirectory</key><string>/Users/hiroseosamuyuki/projects/jarvis-trade-log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/Users/hiroseosamuyuki/.local/node/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>NODE_ENV</key><string>production</string>
+  </dict>
+
+  <key>RunAtLoad</key><true/>
+
+  <!-- クラッシュ時のみ再起動。手動 service:stop（launchctl unload）とは戦わない。 -->
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key><false/>
+  </dict>
+
+  <key>StandardOutPath</key><string>/Users/hiroseosamuyuki/Library/Logs/jarvis-tradelog.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/hiroseosamuyuki/Library/Logs/jarvis-tradelog.err.log</string>
+</dict>
+</plist>
