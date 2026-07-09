@@ -23,7 +23,21 @@ export function setTradingViewEnabled(enabled: boolean): void {
   window.localStorage.setItem(TV_ENABLED_KEY, String(enabled));
 }
 
-/** 銘柄コードを TradingView シンボル（東証）へ変換する。 */
+/**
+ * J-Quants の5桁コードを TradingView（東証）の4桁表記へ正規化する。
+ *
+ * J-Quants は普通株を「4桁コード＋末尾0」の5桁で表す（例: 7203→72030 / 137A→137A0）。
+ * TradingView は 4 桁（英字含む）表記を期待するため、この末尾0を除去する。
+ *  - 5桁かつ末尾が "0" → 末尾を除去（72030→7203 / 137A0→137A）
+ *  - 末尾が "0" 以外（優先株等の5桁, 例 25935）→ そのまま
+ *  - 5桁以外（既に4桁・空文字など）→ そのまま
+ */
+export function normalizeTseCode(code: string): string {
+  if (code.length === 5 && code.endsWith("0")) return code.slice(0, 4);
+  return code;
+}
+
+/** 銘柄コードを TradingView シンボル（東証）へ変換する（5桁→4桁正規化を適用）。 */
 export function tradingViewSymbol(code: string): string {
-  return `TSE:${code}`;
+  return `TSE:${normalizeTseCode(code)}`;
 }
