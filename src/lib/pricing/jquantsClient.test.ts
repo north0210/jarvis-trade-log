@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { testJQuantsConnection, fetchJQuantsQuotes, fetchJQuantsSeries, fetchJQuantsFins, fetchJQuantsMaster, fetchJQuantsBarsByDate, fetchJQuantsCalendar } from "./jquantsClient";
+import { testJQuantsConnection, fetchJQuantsQuotes, fetchJQuantsSeries, fetchJQuantsFins, fetchJQuantsMaster, fetchJQuantsBarsByDate, fetchJQuantsCalendar, describeSeriesFailure } from "./jquantsClient";
 import { __setJQuantsRateLimiter } from "./rateLimiter";
 
 // ※ APIキーはダミー値のみ。実 fetch はモック。
@@ -142,5 +142,25 @@ describe("fetchJQuantsSeries", () => {
     const body = lastBody(fn);
     expect(body.action).toBe("series");
     expect(body.apiKey).toBe(DUMMY_KEY);
+  });
+
+  it("失敗時に reason / httpStatus / message を伝播する", async () => {
+    mockFetchOnce({ ok: false, status: "error", reason: "auth", httpStatus: 401, message: "APIキーが無効です（認証エラー 401）" });
+    const res = await fetchJQuantsSeries("7203", "2026-01-01", "2026-01-31", { apiKey: DUMMY_KEY });
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe("auth");
+    expect(res.httpStatus).toBe(401);
+    expect(res.message).toContain("認証エラー 401");
+  });
+});
+
+describe("describeSeriesFailure（真因の区別表示）", () => {
+  it("401/403 は認証、429 はレート、404 は銘柄不明、その他は message を優先", () => {
+    expect(describeSeriesFailure({ reason: "auth", httpStatus: 401, message: "認証エラー 401" })).toContain("認証エラー 401");
+    expect(describeSeriesFailure({ httpStatus: 403 })).toContain("認証エラー（403）");
+    expect(describeSeriesFailure({ reason: "rate", httpStatus: 429 })).toContain("レート制限");
+    expect(describeSeriesFailure({ httpStatus: 404 }, "7203")).toContain("見つかりません");
+    expect(describeSeriesFailure({ httpStatus: 400, message: "系列取得に失敗しました (7203) (400): subscription covers 2023-01-01 ~ 2025-01-01" })).toContain("subscription covers");
+    expect(describeSeriesFailure({})).toContain("取得に失敗しました");
   });
 });

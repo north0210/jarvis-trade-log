@@ -227,17 +227,27 @@ export async function POST(req: Request) {
   }
   const keySrcLabel = keySource === "env" ? "env" : "画面入力";
 
-  const authFail = (status: number, detail: string) =>
-    NextResponse.json({
+  // 失敗はサーバログにも残す（真因特定用・APIキーは絶対に出さない）。
+  const logFail = (status: number | string, detail: string) =>
+    console.warn(`[jquants] ${action} 失敗 status=${status} keySrc=${keySrcLabel}${detail ? ` detail=${detail.slice(0, 300)}` : ""}`);
+  const authFail = (status: number, detail: string) => {
+    logFail(status, detail);
+    return NextResponse.json({
       ok: false,
       status: "error",
       reason: "auth",
+      httpStatus: status,
       message: `APIキーが無効です（認証エラー ${status}・キー経路: ${keySrcLabel}）${detail ? `: ${detail}` : ""}`,
     });
-  const rateFail = () =>
-    NextResponse.json({ ok: false, status: "error", reason: "rate", message: "レート制限に達しました。時間をおいて再試行してください。" });
-  const otherFail = (status: number, detail: string, ctx: string) =>
-    NextResponse.json({ ok: false, status: "error", message: `${ctx} (${status}・キー経路: ${keySrcLabel})${detail ? `: ${detail}` : ""}` });
+  };
+  const rateFail = () => {
+    logFail(429, "");
+    return NextResponse.json({ ok: false, status: "error", reason: "rate", httpStatus: 429, message: "レート制限に達しました。時間をおいて再試行してください。" });
+  };
+  const otherFail = (status: number, detail: string, ctx: string) => {
+    logFail(status, detail);
+    return NextResponse.json({ ok: false, status: "error", httpStatus: status, message: `${ctx} (${status}・キー経路: ${keySrcLabel})${detail ? `: ${detail}` : ""}` });
+  };
 
   try {
     // 接続テスト: 直近を要求し、無料プランなら範囲外→学習クランプで取得できれば「接続成功」。

@@ -28,6 +28,8 @@ export interface JQuantsResponse {
   status: "connected" | "error" | "unset";
   /** 失敗理由（認証/レート制限）。bulk 更新の中断判定に使用。 */
   reason?: "auth" | "rate";
+  /** 上流 HTTP ステータス（401/403/429/404/400 等）。真因の区別表示に使用。 */
+  httpStatus?: number;
   message?: string;
   quotes?: JQuantsQuote[];
   series?: SeriesPoint[];
@@ -43,7 +45,29 @@ export interface SeriesResult {
   ok: boolean;
   series: SeriesPoint[];
   message?: string;
+  /** 失敗理由（認証/レート）。真因の区別表示に使用。 */
+  reason?: "auth" | "rate";
+  /** 上流 HTTP ステータス（401/403/429/404/400 等）。 */
+  httpStatus?: number;
   cached: boolean;
+}
+
+/** 系列取得失敗の真因（401/403/429/404/その他）を利用者向け文言へ変換する純関数。 */
+export function describeSeriesFailure(
+  f: { reason?: "auth" | "rate"; httpStatus?: number; message?: string },
+  code?: string
+): string {
+  const s = f.httpStatus;
+  if (f.reason === "auth" || s === 401 || s === 403) {
+    return f.message ?? `認証エラー（${s ?? "401/403"}）: APIキー・プラン権限を確認してください。`;
+  }
+  if (f.reason === "rate" || s === 429) {
+    return f.message ?? "レート制限（429）: 時間をおいて再試行してください。";
+  }
+  if (s === 404) {
+    return `銘柄が見つかりません（404${code ? `: ${code}` : ""}）。銘柄コードを確認してください。`;
+  }
+  return f.message ?? `取得に失敗しました${s ? `（${s}）` : ""}。`;
 }
 
 async function callApi(body: unknown): Promise<JQuantsResponse> {
@@ -136,5 +160,5 @@ export async function fetchJQuantsSeries(
     setCachedSeries(code, from, to, res.series);
     return { ok: true, series: res.series, cached: false };
   }
-  return { ok: false, series: [], message: res.message, cached: false };
+  return { ok: false, series: [], message: res.message, reason: res.reason, httpStatus: res.httpStatus, cached: false };
 }

@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getStockRepository } from "@/lib/storage/stockRepository";
 import { getProviderMode, getJQuantsCredentials } from "@/lib/pricing/settings";
-import { fetchJQuantsSeries } from "@/lib/pricing/jquantsClient";
+import { fetchJQuantsSeries, describeSeriesFailure } from "@/lib/pricing/jquantsClient";
 import type { SeriesPoint } from "@/lib/analytics/priceCache";
 import { loadScreenerSnapshot } from "@/lib/screener/screenerRepository";
 import { STRATEGIES } from "@/lib/strategy/strategies";
@@ -129,17 +129,31 @@ export default function StrategyComparePage() {
     const creds = getJQuantsCredentials();
     const perCode: { code: string; series: SeriesPoint[] }[] = [];
     let failed = 0;
+    let emptyInRange = 0; // 取得成功だが対象期間にデータ無し（プラン期間外の可能性）
+    let firstFail: { code: string; reason?: "auth" | "rate"; httpStatus?: number; message?: string } | null = null;
     for (let i = 0; i < codes.length; i++) {
       // requireOpen: 始値なし旧キャッシュは再取得（対象＝この比較ユニバースのみ）。
       const res = await fetchJQuantsSeries(codes[i], fromStr, toStr, creds, { requireOpen: true });
-      if (res.ok && res.series.length > 0) perCode.push({ code: codes[i], series: res.series });
-      else failed++;
+      if (res.ok && res.series.length > 0) {
+        perCode.push({ code: codes[i], series: res.series });
+      } else {
+        failed++;
+        if (res.ok) emptyInRange++;
+        else if (!firstFail) firstFail = { code: codes[i], reason: res.reason, httpStatus: res.httpStatus, message: res.message };
+      }
       setProgress({ done: i + 1, total: codes.length });
     }
 
     if (perCode.length === 0) {
       setRunning(false);
-      setError("日足データを取得できませんでした。認証情報・銘柄コード・プランを確認してください。");
+      // 真因（401/403/429/404/その他）を区別して表示。エラー0で全て空なら期間外の可能性。
+      if (firstFail) {
+        setError(`日足データを取得できませんでした — ${describeSeriesFailure(firstFail, firstFail.code)}`);
+      } else {
+        setError(
+          "対象期間に日足データがありませんでした（J-Quants プランの取得可能期間外の可能性）。期間を短くして再試行してください。"
+        );
+      }
       return;
     }
 
@@ -147,7 +161,12 @@ export default function StrategyComparePage() {
     saveStrategyComparison(r);
     setResult(r);
     setRunning(false);
-    if (failed > 0) setError(`${failed} 銘柄の取得に失敗しました（部分結果を表示）。`);
+    if (failed > 0) {
+      const note = firstFail
+        ? describeSeriesFailure(firstFail, firstFail.code)
+        : `${emptyInRange} 銘柄は対象期間にデータなし（期間外の可能性）`;
+      setError(`${perCode.length}/${codes.length} 銘柄で比較（${failed} 銘柄スキップ）。${note}`);
+    }
   };
 
   const totalSubstitute = useMemo(
