@@ -90,21 +90,21 @@ async function upstreamErrorDetail(res: Response): Promise<string> {
 // ---- 購読カバレッジ終端の学習キャッシュ（プロセス内・短TTL） ----
 // 無料プランのローリング遅延に追随しつつ、bulk 中の毎回 400 を避ける。
 const COVERAGE_TTL_MS = 30 * 60 * 1000;
-// start = 購読開始日（範囲外400の本文から学習）。end = 取得可能終端。
-let coverageCache: { start?: string; end: string; at: number } | null = null;
+// start = 購読開始日（範囲外400本文から学習）。end = 取得可能終端（V2 は空欄で返ることがあり未知=undefined）。
+let coverageCache: { start?: string; end?: string; at: number } | null = null;
 
 function coverageFresh(): boolean {
   return !!coverageCache && Date.now() - coverageCache.at < COVERAGE_TTL_MS;
 }
 function getCoverageEnd(): string | null {
-  return coverageFresh() ? coverageCache!.end : null;
+  return coverageFresh() ? coverageCache!.end ?? null : null;
 }
 function getCoverageStart(): string | null {
   return coverageFresh() ? coverageCache!.start ?? null : null;
 }
-/** 範囲外(400)本文から購読範囲を学習してキャッシュする（start/end 一括）。 */
-function learnCoverage(range: { from: string; to: string }): void {
-  coverageCache = { start: range.from, end: range.to, at: Date.now() };
+/** 範囲外(400)本文から購読範囲を学習してキャッシュする（start は必須・end は空欄可）。 */
+function learnCoverage(range: { from: string; to: string | null }): void {
+  coverageCache = { start: range.from, end: range.to ?? undefined, at: Date.now() };
 }
 
 interface BarsResult {

@@ -166,13 +166,15 @@ export function deriveQuote(code: string, bars: InternalBar[]): DerivedQuote | n
 
 /**
  * サブスクリプション範囲外エラー（400）のメッセージから対象期間を抽出する。
- * 例: "Your subscription covers the following dates: 2024-04-12 ~ 2026-04-12. ..."
+ * 例1: "Your subscription covers the following dates: 2024-04-12 ~ 2026-04-12. ..."
+ * 例2（V2 実測・終端空欄）: "… covers the following dates: 2021-07-13 ~ . …"
+ * → 日付を順に拾い、開始日は必須、終端が無ければ to=null（終端不明）とする。
  * 見つからなければ null。
  */
-export function parseSubscriptionRange(message: string): { from: string; to: string } | null {
-  const m = message.match(/(\d{4}-\d{2}-\d{2})\s*[~〜]\s*(\d{4}-\d{2}-\d{2})/);
-  if (!m) return null;
-  return { from: m[1], to: m[2] };
+export function parseSubscriptionRange(message: string): { from: string; to: string | null } | null {
+  const dates = message.match(/\d{4}-\d{2}-\d{2}/g);
+  if (!dates || dates.length === 0) return null;
+  return { from: dates[0], to: dates[1] ?? null };
 }
 
 const dateToMs = (d: string): number =>

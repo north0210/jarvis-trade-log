@@ -29,7 +29,9 @@ const PERIODS = [
   { key: "5", label: "5年", years: 5 },
 ];
 
-const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
+// ローカル(JST)日付で YYYY-MM-DD 化する。toISOString は UTC 変換で 1 日ずれ、
+// 購読開始日ちょうど(例 2021-07-13)を要求すると前日になり 400 の原因になるため使わない。
+const fmtDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const pct = (n: number) => `${n.toFixed(1)}%`;
 const pf = (n: number | null) => (n != null ? n.toFixed(2) : "—");
 const exp = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;

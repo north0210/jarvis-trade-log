@@ -137,6 +137,27 @@ describe("parseSubscriptionRange（範囲外400メッセージの解析）", () 
   it("範囲が無ければ null", () => {
     expect(parseSubscriptionRange("Invalid parameter: code")).toBeNull();
   });
+  it("V2 実測: 終端が空欄でも from を学習し to=null（再発バグの核）", () => {
+    const msg =
+      "Your subscription covers the following dates: 2021-07-13 ~ . If you want more data, please check other plans:https://jpx-jquants.com/#dataset";
+    expect(parseSubscriptionRange(msg)).toEqual({ from: "2021-07-13", to: null });
+  });
+});
+
+describe("再発400の再現→学習→クランプ→是正の流れ（回帰固定）", () => {
+  it("空欄end メッセージから start を学習し、1日早い from（toISOのUTCずれ）を購読開始日へ是正", () => {
+    // 実ログの 400 本文（end 空欄）。
+    const detail =
+      "Your subscription covers the following dates: 2021-07-13 ~ . If you want more data, please check other plans:https://jpx-jquants.com/#dataset";
+    const range = parseSubscriptionRange(detail);
+    expect(range).toEqual({ from: "2021-07-13", to: null });
+
+    // 学習した [start, end=null] で、UTC変換により 1 日早くなった from=2021-07-12 をクランプ。
+    const clamped = clampToCoverage("2021-07-12", "2026-07-13", range!.to, range!.from);
+    expect(clamped.clamped).toBe(true);
+    expect(clamped.from).toBe("2021-07-13"); // 購読開始日へ是正 → 再要求は成功する
+    expect(clamped.to).toBe("2026-07-13"); // 終端不明なので to は変更しない
+  });
 });
 
 describe("clampToCoverage（幅保持クランプ）", () => {
