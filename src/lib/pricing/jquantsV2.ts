@@ -180,23 +180,35 @@ const dateToMs = (d: string): number =>
 const msToDate = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 
 /**
- * 要求窓 [from,to] を購読カバレッジ終端に合わせてクランプする。
- * - coverageEnd が無い、または to がカバレッジ内（to<=coverageEnd）なら無変更。
- * - to がカバレッジ外なら、**窓の幅を保ったまま**終端を coverageEnd に寄せる
+ * 要求窓 [from,to] を購読カバレッジ [coverageStart, coverageEnd] に合わせてクランプする。
+ * - 終端: to が coverageEnd を超えるなら、**窓の幅を保ったまま**終端を coverageEnd に寄せる
  *   （例: 直近120日要求 → [coverageEnd-120日, coverageEnd]）。
- * これにより無料プランは最新の取得可能データを、有料プランは今日までを自然に取得する。
+ * - 始端: from が coverageStart より前なら開始日へ寄せる（幅は縮む）。
+ *   ↑ 終端クランプで from が購読開始日より前へずれ 400 になる主因をここで是正する。
+ * coverageStart 省略時（既存呼び出し）は始端クランプなし＝従来動作を完全維持。
  */
 export function clampToCoverage(
   from: string,
   to: string,
-  coverageEnd: string | null
+  coverageEnd: string | null,
+  coverageStart: string | null = null
 ): { from: string; to: string; clamped: boolean } {
-  if (!coverageEnd) return { from, to, clamped: false };
-  if (dateToMs(to) <= dateToMs(coverageEnd)) return { from, to, clamped: false };
-  const widthMs = Math.max(0, dateToMs(to) - dateToMs(from));
-  const newTo = coverageEnd.slice(0, 10);
-  const newFrom = msToDate(dateToMs(coverageEnd) - widthMs);
-  return { from: newFrom, to: newTo, clamped: true };
+  let f = from;
+  let t = to;
+  let clamped = false;
+  // 終端クランプ（幅保持）。
+  if (coverageEnd && dateToMs(t) > dateToMs(coverageEnd)) {
+    const widthMs = Math.max(0, dateToMs(t) - dateToMs(f));
+    t = coverageEnd.slice(0, 10);
+    f = msToDate(dateToMs(t) - widthMs);
+    clamped = true;
+  }
+  // 始端クランプ（購読開始日より前は開始日へ）。
+  if (coverageStart && dateToMs(f) < dateToMs(coverageStart)) {
+    f = coverageStart.slice(0, 10);
+    clamped = true;
+  }
+  return { from: f, to: t, clamped };
 }
 
 /**

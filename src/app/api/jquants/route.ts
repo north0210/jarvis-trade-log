@@ -90,11 +90,21 @@ async function upstreamErrorDetail(res: Response): Promise<string> {
 // ---- 購読カバレッジ終端の学習キャッシュ（プロセス内・短TTL） ----
 // 無料プランのローリング遅延に追随しつつ、bulk 中の毎回 400 を避ける。
 const COVERAGE_TTL_MS = 30 * 60 * 1000;
-let coverageCache: { end: string; at: number } | null = null;
+// start = 購読開始日（範囲外400の本文から学習）。end = 取得可能終端。
+let coverageCache: { start?: string; end: string; at: number } | null = null;
 
+function coverageFresh(): boolean {
+  return !!coverageCache && Date.now() - coverageCache.at < COVERAGE_TTL_MS;
+}
 function getCoverageEnd(): string | null {
-  if (coverageCache && Date.now() - coverageCache.at < COVERAGE_TTL_MS) return coverageCache.end;
-  return null;
+  return coverageFresh() ? coverageCache!.end : null;
+}
+function getCoverageStart(): string | null {
+  return coverageFresh() ? coverageCache!.start ?? null : null;
+}
+/** 範囲外(400)本文から購読範囲を学習してキャッシュする（start/end 一括）。 */
+function learnCoverage(range: { from: string; to: string }): void {
+  coverageCache = { start: range.from, end: range.to, at: Date.now() };
 }
 
 interface BarsResult {
@@ -110,7 +120,7 @@ interface BarsResult {
  */
 async function collectBars(apiKey: string, code: string, reqFrom: string, reqTo: string): Promise<BarsResult> {
   for (let attempt = 0; attempt < 2; attempt++) {
-    const clamp = clampToCoverage(reqFrom, reqTo, getCoverageEnd());
+    const clamp = clampToCoverage(reqFrom, reqTo, getCoverageEnd(), getCoverageStart());
     const raw: V2DailyBar[] = [];
     let key: string | undefined;
     let guard = 0;
@@ -128,8 +138,8 @@ async function collectBars(apiKey: string, code: string, reqFrom: string, reqTo:
         failDetail = await upstreamErrorDetail(res);
         if (res.status === 400) {
           const range = parseSubscriptionRange(failDetail);
-          if (range && getCoverageEnd() !== range.to) {
-            coverageCache = { end: range.to, at: Date.now() };
+          if (range && (getCoverageEnd() !== range.to || getCoverageStart() !== range.from)) {
+            learnCoverage(range);
             learned = true;
           }
         }
@@ -311,8 +321,8 @@ export async function POST(req: Request) {
         }
         // サブスク範囲外を学習して 1 回だけ再クランプ。
         const range = r.status === 400 ? parseSubscriptionRange(r.detail ?? "") : null;
-        if (range && getCoverageEnd() !== range.to) {
-          coverageCache = { end: range.to, at: Date.now() };
+        if (range && (getCoverageEnd() !== range.to || getCoverageStart() !== range.from)) {
+          learnCoverage(range);
           continue;
         }
         return otherFail(r.status, r.detail ?? "", `日付一括取得に失敗しました (${date})`);

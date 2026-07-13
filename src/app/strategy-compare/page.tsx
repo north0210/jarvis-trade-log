@@ -157,7 +157,20 @@ export default function StrategyComparePage() {
       return;
     }
 
-    const r = runStrategyComparison(STRATEGIES, perCode, fromStr, toStr, new Date().toISOString());
+    // 実効比較期間 = 実際に取得できた系列の日付レンジ（プラン範囲/クランプ後の真の窓）。
+    let effFrom: string | null = null;
+    let effTo: string | null = null;
+    for (const { series } of perCode) {
+      for (const p of series) {
+        if (effFrom === null || p.date < effFrom) effFrom = p.date;
+        if (effTo === null || p.date > effTo) effTo = p.date;
+      }
+    }
+    const useFrom = effFrom ?? fromStr;
+    const useTo = effTo ?? toStr;
+
+    const base = runStrategyComparison(STRATEGIES, perCode, useFrom, useTo, new Date().toISOString());
+    const r = { ...base, requestedFrom: fromStr, requestedTo: toStr };
     saveStrategyComparison(r);
     setResult(r);
     setRunning(false);
@@ -174,6 +187,12 @@ export default function StrategyComparePage() {
     [result]
   );
   const totalLapses = useMemo(() => (result ? result.entries.reduce((a, e) => a + e.lapses, 0) : 0), [result]);
+  const clampNote = useMemo(() => {
+    if (!result?.requestedFrom || !result?.requestedTo) return null;
+    const adjusted = result.from > result.requestedFrom || result.to < result.requestedTo;
+    if (!adjusted) return null;
+    return `プラン取得可能範囲に合わせて実効期間を ${result.from} 〜 ${result.to} に調整しました（要求: ${result.requestedFrom} 〜 ${result.requestedTo}）。`;
+  }, [result]);
 
   return (
     <div className="space-y-6">
@@ -205,14 +224,16 @@ export default function StrategyComparePage() {
           <section className="hud-panel p-4">
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
               <span className="text-arc font-mono">
-                比較対象期間: {result.from} 〜 {result.to}（前半/後半 分割日: {result.mid}）
+                実効比較期間: {result.from} 〜 {result.to}（前半/後半 分割日: {result.mid}）
               </span>
               <span className="text-arcdim font-mono text-xs">
                 ユニバース {result.universeCount} 銘柄 ／ 代用約定 {totalSubstitute} 件 ／ 失効 {totalLapses} 件
               </span>
             </div>
+            {clampNote && <p className="text-arc text-xs mt-2 font-mono">ℹ {clampNote}</p>}
             <p className="text-caution text-xs mt-2">
-              ⚠ {STRATEGIES[0].disclaimer} 期待値は1トレード平均リターン、指標は等ウェイト（%）で算出しています。
+              ⚠ {STRATEGIES[0].disclaimer} 期待値は1トレード平均リターン、指標は等ウェイト（%）で算出。
+              長期参照の戦略（B=200日線等）はウォームアップ分だけ評価開始が後ろにずれます（前半の取引数が少なくなります）。
             </p>
           </section>
 

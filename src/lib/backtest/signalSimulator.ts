@@ -202,11 +202,15 @@ export interface StrategyComparisonEntry {
 
 export interface StrategyComparisonResult {
   generatedAt: string; // ISO（注入）
+  /** 実効比較期間（プラン取得可能範囲・実データに合わせてクランプ後）。 */
   from: string; // YYYY-MM-DD
   to: string; // YYYY-MM-DD
   mid: string; // 前半/後半の分割日
   universeCount: number;
   entries: StrategyComparisonEntry[];
+  /** ユーザーが要求した期間（クランプ発生の注記表示用・省略可）。 */
+  requestedFrom?: string;
+  requestedTo?: string;
 }
 
 /** 期間の中点日（アウトオブサンプル分割用）。 */
