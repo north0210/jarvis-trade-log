@@ -44,7 +44,7 @@ const LEGACY_36_MINUS_4 = [
   "jarvis-trade-log:watchlist-settings",
 ];
 
-// 今回追加（必須1a）
+// 追加（必須1a）
 const ADDED_4 = [
   "jarvis-trade-log:screener-auto-settings",
   "jarvis-trade-log:backtest-v2-results",
@@ -53,18 +53,25 @@ const ADDED_4 = [
   "jarvis-trade-log:release-checklist",
 ];
 
-const EXPECTED_36 = [...LEGACY_36_MINUS_4, ...ADDED_4].sort();
+// 追加（Phase 1 / ペーパートレード＋戦略比較）
+const ADDED_PAPER = [
+  "jarvis-trade-log:paper-broker-account",
+  "jarvis-trade-log:paper-broker-settings",
+  "jarvis-trade-log:strategy-comparison",
+];
+
+const EXPECTED_40 = [...LEGACY_36_MINUS_4, ...ADDED_4, ...ADDED_PAPER].sort();
 
 describe("BACKUP_ITEMS 導出（keys.ts レジストリから）", () => {
-  it("対象は 37キーで一致（スナップショット固定）", () => {
+  it("対象は 40キーで一致（スナップショット固定）", () => {
     const actual = BACKUP_ITEMS.map((i) => i.storageKey).sort();
-    expect(actual).toEqual(EXPECTED_36);
-    expect(actual.length).toBe(37);
+    expect(actual).toEqual(EXPECTED_40);
+    expect(actual.length).toBe(40);
   });
 
-  it("追加4キーが確実に含まれる", () => {
+  it("追加キーが確実に含まれる", () => {
     const set = new Set(BACKUP_ITEMS.map((i) => i.storageKey));
-    for (const k of ADDED_4) expect(set.has(k)).toBe(true);
+    for (const k of [...ADDED_4, ...ADDED_PAPER]) expect(set.has(k)).toBe(true);
   });
 
   it("各 BACKUP_ITEM は key/label/kind/unit を持つ", () => {

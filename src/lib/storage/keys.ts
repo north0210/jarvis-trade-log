@@ -116,6 +116,10 @@ const RAW_KEY_REGISTRY: Omit<KeyDef, "refName">[] = [
   { storageKey: "jarvis-trade-log:cache-policy", backupKey: "cachePolicy", label: "キャッシュ保持方針", kind: "value", unit: "settings", includeInBackup: true },
   { storageKey: "jarvis-trade-log:price-provider-mode", backupKey: "priceProviderMode", label: "価格プロバイダモード", kind: "value", unit: "settings", includeInBackup: true },
   { storageKey: "jarvis-trade-log:release-checklist", backupKey: "releaseChecklist", label: "初回チェック/免責同意", kind: "value", unit: "settings", includeInBackup: true },
+  // === ペーパートレード（Phase 1）===
+  { storageKey: "jarvis-trade-log:paper-broker-account", backupKey: "paperBrokerAccount", label: "ペーパートレード口座", kind: "value", unit: "trades", includeInBackup: true, note: "仮想約定のポジション・確定損益・キルスイッチ状態。ユーザー生成物。" },
+  { storageKey: "jarvis-trade-log:paper-broker-settings", backupKey: "paperBrokerSettings", label: "ペーパートレード資金管理設定", kind: "value", unit: "settings", includeInBackup: true, note: "運用資金・分割数・キルスイッチ閾値。ハードリミットは定数のため非保存。" },
+  { storageKey: "jarvis-trade-log:strategy-comparison", backupKey: "strategyComparison", label: "戦略比較結果", kind: "value", unit: "reports", includeInBackup: true, note: "3戦略×スクリーナー上位の一括比較（前半/後半OOS）。再実行で再生成可能なユーザー成果物。" },
   // === バックアップ対象外（理由付き）===
   { storageKey: "jarvis-trade-log:advisor-ai-mode", label: "AIモード(旧)", kind: "value", unit: "settings", includeInBackup: false, excludeReason: "redundant", note: "ai-config に統合済み。後方互換で残存。" },
   { storageKey: "jarvis-trade-log:lastBackup", label: "最終バックアップ日時", kind: "value", unit: "settings", includeInBackup: false, excludeReason: "meta" },

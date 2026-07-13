@@ -74,6 +74,14 @@ describe("mapDailyBar（V2フィールド → 内部日足）", () => {
   it("Date 欠落は空文字", () => {
     expect(mapDailyBar({ C: 100 }).date).toBe("");
   });
+  it("AdjO があれば adjOpen を付与（翌営業日始値約定用）", () => {
+    const bar: V2DailyBar = { Date: "2026-01-05", C: 3100, AdjC: 3050, AdjO: 3010, Vo: 12345 };
+    expect(mapDailyBar(bar).adjOpen).toBe(3010);
+  });
+  it("AdjO が無ければ adjOpen キーは付与しない（後方互換）", () => {
+    const out = mapDailyBar({ Date: "2026-01-05", C: 3100, AdjC: 3050, Vo: 1 });
+    expect("adjOpen" in out).toBe(false);
+  });
 });
 
 describe("mapDailyBars（整形・昇順ソート・無効除外）", () => {

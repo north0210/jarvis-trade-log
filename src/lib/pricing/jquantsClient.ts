@@ -114,14 +114,19 @@ export async function fetchJQuantsFins(
   return callApi({ action: "fins", code, apiKey: apiKeyOf(credentials) });
 }
 
-/** 期間指定の日足系列を取得（キャッシュ優先）。 */
+/**
+ * 期間指定の日足系列を取得（キャッシュ優先）。
+ * opts.requireOpen=true のとき、始値(adjOpen)を含まない旧版キャッシュは無視して再取得する
+ * （バックテストの翌営業日始値約定用。既定 false＝従来どおり旧キャッシュも利用し再取得を強制しない）。
+ */
 export async function fetchJQuantsSeries(
   code: string,
   from: string,
   to: string,
-  credentials: JQuantsCredentials | null
+  credentials: JQuantsCredentials | null,
+  opts?: { requireOpen?: boolean }
 ): Promise<SeriesResult> {
-  const cached = getCachedSeries(code, from, to);
+  const cached = getCachedSeries(code, from, to, opts);
   if (cached) return { ok: true, series: cached, cached: true };
 
   // キャッシュミス時のみ実通信 → 共有リミッタ（5req/分）を消費する。

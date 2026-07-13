@@ -174,6 +174,11 @@ export async function runScreenerAuto(opts?: { now?: Date; signal?: AbortSignal 
     const credentials = getJQuantsCredentials();
     const snapshot = loadScreenerSnapshot();
 
+    // 鮮度判定の前に取引カレンダーを最新化する（鮮度内なら no-op・失敗は静的判定へ退避）。
+    // ゲート前に置くことで、fresh skip する場合でもカレンダーが取得され、
+    // 起動時に UI の「(暫定・取引カレンダー未取得)」表示が確定・解消する（Task 0）。
+    await ensureTradingCalendar(credentials, now);
+
     // 鮮度ゲート（取引カレンダー由来の expectedAsOf 判定）。
     // 既存 snapshot が期待鮮度に届いていれば probe API を叩かず skip する。
     //   例（Light）: 当日 16:30 配信前は「前営業日が最新」でも fresh 判定になり無駄打ちしない。
@@ -183,9 +188,6 @@ export async function runScreenerAuto(opts?: { now?: Date; signal?: AbortSignal 
       setScreenerAutoSettings({ lastCheckedPeriod: periodKeyOf(now, settings.frequency) });
       return { ran: false, reason: "fresh", message: `最新データ ${staleness.expected} 時点（更新不要）` };
     }
-
-    // 更新確定 → 取引カレンダーを最新化（鮮度内なら no-op・失敗は静的判定へ退避）。
-    await ensureTradingCalendar(credentials, now);
 
     // probe: 最新アンカーを取得（共有リミッタ経由）。前進していなければフル更新しない。
     try {

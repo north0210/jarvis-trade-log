@@ -59,6 +59,7 @@ const GROUPS: NavGroup[] = [
       { href: "/strategy", label: "戦略テンプレート" },
       { href: "/rule-improver", label: "ルール改善" },
       { href: "/strategy-backtest", label: "一括バックテスト" },
+      { href: "/strategy-compare", label: "戦略比較(A/B/C)" },
       { href: "/strategy-rank-history", label: "ランキング履歴" },
       { href: "/rebalance", label: "リバランス調整" },
       { href: "/discipline", label: "規律チェック" },

@@ -13,9 +13,22 @@ export interface SeriesPoint {
   close: number | null;
   adjClose: number | null;
   volume: number | null;
+  /**
+   * 調整済み始値（翌営業日始値約定のバックテスト用）。
+   * optional＝後方互換: 旧キャッシュ（v1）や始値未提供日は欠落する（終値で代用約定）。
+   */
+  adjOpen?: number | null;
 }
 
 export type CachePolicy = "30" | "90" | "none";
+
+/**
+ * 価格キャッシュのスキーマ版。
+ * - v1（= 版なし）: 始値(adjOpen)を含まない旧エントリ。
+ * - v2: adjOpen を含む（存在日のみ）。
+ * K レジストリのキー自体は不変とし、版は値内フィールド `v` で管理する（強制再取得を避ける）。
+ */
+export const CACHE_SCHEMA_VERSION = 2;
 
 interface CacheEntry {
   code: string;
@@ -23,6 +36,8 @@ interface CacheEntry {
   to: string;
   fetchedAt: string;
   series: SeriesPoint[];
+  /** スキーマ版（未設定＝v1）。 */
+  v?: number;
 }
 
 // 動的プレフィックス（実キーは price-cache:<code>）。末尾コロン込みで登録済み。
@@ -46,8 +61,18 @@ function ttlDays(p: CachePolicy): number | null {
   return null; // 無期限
 }
 
-/** キャッシュ取得。要求範囲を包含し、期限内なら返す。無ければ null。 */
-export function getCachedSeries(code: string, from: string, to: string): SeriesPoint[] | null {
+/**
+ * キャッシュ取得。要求範囲を包含し、期限内なら返す。無ければ null。
+ * opts.requireOpen=true のとき、始値(adjOpen)を持たない旧版(v1)エントリは
+ * cache miss 扱い（null）にして再取得を促す（バックテストの翌営業日始値約定用）。
+ * 既存の呼び出し（requireOpen 未指定）は従来どおり v1 も返す＝強制再取得しない。
+ */
+export function getCachedSeries(
+  code: string,
+  from: string,
+  to: string,
+  opts?: { requireOpen?: boolean }
+): SeriesPoint[] | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(PREFIX + code);
@@ -55,6 +80,8 @@ export function getCachedSeries(code: string, from: string, to: string): SeriesP
     const e = JSON.parse(raw) as CacheEntry;
     // 範囲包含チェック
     if (e.from > from || e.to < to) return null;
+    // 始値要求時: 旧版（adjOpen なし）は再取得させる
+    if (opts?.requireOpen && (e.v ?? 1) < CACHE_SCHEMA_VERSION) return null;
     // 期限チェック
     const ttl = ttlDays(getCachePolicy());
     if (ttl != null) {
@@ -70,7 +97,7 @@ export function getCachedSeries(code: string, from: string, to: string): SeriesP
 
 export function setCachedSeries(code: string, from: string, to: string, series: SeriesPoint[]): void {
   if (typeof window === "undefined") return;
-  const entry: CacheEntry = { code, from, to, fetchedAt: new Date().toISOString(), series };
+  const entry: CacheEntry = { code, from, to, fetchedAt: new Date().toISOString(), series, v: CACHE_SCHEMA_VERSION };
   try {
     window.localStorage.setItem(PREFIX + code, JSON.stringify(entry));
   } catch {

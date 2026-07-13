@@ -21,7 +21,9 @@ export const MARKETS_CALENDAR_PATH = "/markets/calendar";
 export interface V2DailyBar {
   Date?: string; // YYYY-MM-DD
   Code?: string;
+  O?: number | null; // 始値（調整前）
   C?: number | null; // 終値（調整前）
+  AdjO?: number | null; // 調整済み始値（バックテストの翌営業日始値約定に使用）
   AdjC?: number | null; // 調整済み終値
   Vo?: number | null; // 取引高（調整前）
   AdjVo?: number | null; // 調整済み取引高（スクリーナーの指標計算に使用）
@@ -54,6 +56,8 @@ export interface InternalBar {
   close: number | null;
   adjClose: number | null;
   volume: number | null;
+  /** 調整済み始値（翌営業日始値約定のバックテスト用）。存在時のみ付与＝後方互換。 */
+  adjOpen?: number | null;
 }
 
 /** provider.ts の JQuantsQuote と同形（RSI/出来高算出用の系列を含む）。 */
@@ -102,14 +106,20 @@ export function pickApiKey(
   return resolveApiKey(envKey, bodyKey).key;
 }
 
-/** V2 レコード → 内部日足へ変換（終値は C 優先・無ければ AdjC）。 */
+/**
+ * V2 レコード → 内部日足へ変換（終値は C 優先・無ければ AdjC）。
+ * 調整済み始値(AdjO)は存在するときのみ adjOpen として付与する（後方互換のため省略可）。
+ */
 export function mapDailyBar(bar: V2DailyBar): InternalBar {
-  return {
+  const out: InternalBar = {
     date: bar.Date ?? "",
     close: bar.C ?? bar.AdjC ?? null,
     adjClose: bar.AdjC ?? null,
     volume: bar.Vo ?? null,
   };
+  const adjOpen = bar.AdjO ?? null;
+  if (adjOpen != null) out.adjOpen = adjOpen;
+  return out;
 }
 
 /** V2 レコード配列 → 日付昇順の内部日足（無効日付・終値null は除外）。 */

@@ -11,7 +11,7 @@ import PageIntro from "@/components/PageIntro";
 import HelpTooltip from "@/components/HelpTooltip";
 import { getProviderMode, getJQuantsCredentials } from "@/lib/pricing/settings";
 import { runScreener, type ScreenerPhase } from "@/lib/screener/screenerRun";
-import { resolveExpectedAsOf, isDataStale, type ExpectedAsOfSource } from "@/lib/pricing/calendar";
+import { resolveExpectedAsOf, isDataStale, ensureTradingCalendar, type ExpectedAsOfSource } from "@/lib/pricing/calendar";
 import { JQUANTS_EFFECTIVE_RPM } from "@/lib/pricing/serverRateLimiter";
 import { loadScreenerSnapshot, type ScreenerSnapshot } from "@/lib/screener/screenerRepository";
 import type { ScreenerRow } from "@/lib/screener/technical";
@@ -68,7 +68,12 @@ export default function ScreenerPage() {
     const unsub = subscribeScreenerAuto(() => {
       const rt = getScreenerAutoRuntime();
       setAutoRuntime(rt);
-      if (!rt.running) setSnap(loadScreenerSnapshot());
+      if (!rt.running) {
+        setSnap(loadScreenerSnapshot());
+        // 自動更新経路で取引カレンダーが取得された可能性 → 鮮度表示を再算出。
+        const f = resolveExpectedAsOf(new Date());
+        setFreshness({ expected: f.date, source: f.source });
+      }
     });
     return unsub;
   }, []);
@@ -101,7 +106,10 @@ export default function ScreenerPage() {
     setRunning(true);
     setProgress(null);
     setMsg({ tone: "ok", text: "スクリーニング実行中です、ボス…" });
-    const r = await runScreener(getJQuantsCredentials(), {
+    const credentials = getJQuantsCredentials();
+    // 実行前に取引カレンダーを最新化（鮮度判定・UI 表示を確定。鮮度内なら no-op・失敗は静的判定へ退避）。
+    await ensureTradingCalendar(credentials, new Date());
+    const r = await runScreener(credentials, {
       signal: controller.signal,
       onProgress: (phase, done, total) => setProgress({ phase, done, total }),
     });
@@ -109,6 +117,9 @@ export default function ScreenerPage() {
     setProgress(null);
     abortRef.current = null;
     setSnap(loadScreenerSnapshot());
+    // 取引カレンダーが取得された可能性 → 鮮度表示（「暫定・未取得」）を再算出して解消させる。
+    const f = resolveExpectedAsOf(new Date());
+    setFreshness({ expected: f.date, source: f.source });
     setMsg({ tone: r.ok ? "ok" : "err", text: r.message });
   };
 
