@@ -120,6 +120,8 @@ const RAW_KEY_REGISTRY: Omit<KeyDef, "refName">[] = [
   { storageKey: "jarvis-trade-log:paper-broker-account", backupKey: "paperBrokerAccount", label: "ペーパートレード口座", kind: "value", unit: "trades", includeInBackup: true, note: "仮想約定のポジション・確定損益・キルスイッチ状態。ユーザー生成物。" },
   { storageKey: "jarvis-trade-log:paper-broker-settings", backupKey: "paperBrokerSettings", label: "ペーパートレード資金管理設定", kind: "value", unit: "settings", includeInBackup: true, note: "運用資金・分割数・キルスイッチ閾値。ハードリミットは定数のため非保存。" },
   { storageKey: "jarvis-trade-log:strategy-comparison", backupKey: "strategyComparison", label: "戦略比較結果", kind: "value", unit: "reports", includeInBackup: true, note: "3戦略×スクリーナー上位の一括比較（前半/後半OOS）。再実行で再生成可能なユーザー成果物。" },
+  { storageKey: "jarvis-trade-log:paper-order-queue", backupKey: "paperOrderQueue", label: "ペーパー注文キュー", kind: "array", unit: "trades", includeInBackup: true, note: "夜間生成→翌営業日始値約定までの未約定注文。アプリ再起動を跨ぐため永続化必須。" },
+  { storageKey: "jarvis-trade-log:signal-engine-settings", backupKey: "signalEngineSettings", label: "シグナル生成設定", kind: "value", unit: "settings", includeInBackup: true, note: "自動実行ON/OFF・戦略別の有効/無効（既定: C/B 有効・A 無効）。" },
   // === バックアップ対象外（理由付き）===
   { storageKey: "jarvis-trade-log:advisor-ai-mode", label: "AIモード(旧)", kind: "value", unit: "settings", includeInBackup: false, excludeReason: "redundant", note: "ai-config に統合済み。後方互換で残存。" },
   { storageKey: "jarvis-trade-log:lastBackup", label: "最終バックアップ日時", kind: "value", unit: "settings", includeInBackup: false, excludeReason: "meta" },

@@ -51,6 +51,7 @@ const EXPECTED_KEYS = [
   "jarvis-trade-log:onboarding-done",
   "jarvis-trade-log:paper-broker-account",
   "jarvis-trade-log:paper-broker-settings",
+  "jarvis-trade-log:paper-order-queue",
   "jarvis-trade-log:performance-mode",
   "jarvis-trade-log:price-cache:",
   "jarvis-trade-log:price-provider-mode",
@@ -63,6 +64,7 @@ const EXPECTED_KEYS = [
   "jarvis-trade-log:screener-auto-settings",
   "jarvis-trade-log:screener-snapshot",
   "jarvis-trade-log:settings",
+  "jarvis-trade-log:signal-engine-settings",
   "jarvis-trade-log:simulations",
   "jarvis-trade-log:stock-bt-results",
   "jarvis-trade-log:stocks",
@@ -78,21 +80,21 @@ const EXPECTED_KEYS = [
 ];
 
 describe("KEY_REGISTRY: キー集合のスナップショット固定", () => {
-  it("全 storageKey が期待リスト（53エントリ）と過不足なく一致", () => {
+  it("全 storageKey が期待リスト（55エントリ）と過不足なく一致", () => {
     const actual = KEY_REGISTRY.map((k) => k.storageKey).sort();
     expect(actual).toEqual(EXPECTED_KEYS);
   });
 
-  it("エントリ総数 = 53（具体キー52 + 動的プレフィックス1）", () => {
-    expect(KEY_REGISTRY.length).toBe(53);
-    expect(EXPECTED_KEYS.length).toBe(53);
+  it("エントリ総数 = 55（具体キー54 + 動的プレフィックス1）", () => {
+    expect(KEY_REGISTRY.length).toBe(55);
+    expect(EXPECTED_KEYS.length).toBe(55);
   });
 
   it("動的プレフィックスは price-cache: のみ（それ以外は具体キー）", () => {
     const prefixEntries = KEY_REGISTRY.map((k) => k.storageKey).filter((k) => k.endsWith(":"));
     expect(prefixEntries).toEqual([PRICE_CACHE_PREFIX]);
-    // 具体キー数 = 52
-    expect(KEY_REGISTRY.length - prefixEntries.length).toBe(52);
+    // 具体キー数 = 54
+    expect(KEY_REGISTRY.length - prefixEntries.length).toBe(54);
   });
 });
 
@@ -134,9 +136,9 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
     }
   });
 
-  it("K は全キー（refName ベース・53エントリ）を収録", () => {
+  it("K は全キー（refName ベース・55エントリ）を収録", () => {
     expect(Object.keys(K).length).toBe(KEY_REGISTRY.length);
-    expect(Object.keys(K).length).toBe(53);
+    expect(Object.keys(K).length).toBe(55);
   });
 
   it("K の全値が jarvis-trade-log: プレフィックスを持つ", () => {

@@ -53,20 +53,22 @@ const ADDED_4 = [
   "jarvis-trade-log:release-checklist",
 ];
 
-// 追加（Phase 1 / ペーパートレード＋戦略比較）
+// 追加（Phase 1 / ペーパートレード＋戦略比較＋シグナル生成）
 const ADDED_PAPER = [
   "jarvis-trade-log:paper-broker-account",
   "jarvis-trade-log:paper-broker-settings",
   "jarvis-trade-log:strategy-comparison",
+  "jarvis-trade-log:paper-order-queue",
+  "jarvis-trade-log:signal-engine-settings",
 ];
 
-const EXPECTED_40 = [...LEGACY_36_MINUS_4, ...ADDED_4, ...ADDED_PAPER].sort();
+const EXPECTED_42 = [...LEGACY_36_MINUS_4, ...ADDED_4, ...ADDED_PAPER].sort();
 
 describe("BACKUP_ITEMS 導出（keys.ts レジストリから）", () => {
-  it("対象は 40キーで一致（スナップショット固定）", () => {
+  it("対象は 42キーで一致（スナップショット固定）", () => {
     const actual = BACKUP_ITEMS.map((i) => i.storageKey).sort();
-    expect(actual).toEqual(EXPECTED_40);
-    expect(actual.length).toBe(40);
+    expect(actual).toEqual(EXPECTED_42);
+    expect(actual.length).toBe(42);
   });
 
   it("追加キーが確実に含まれる", () => {

@@ -38,7 +38,7 @@ describe("バックアップ完全性: ラウンドトリップ（37キー全数
 
   it("投入→export→全消去→import で 全37キー・全値が一致復元される", () => {
     const sample = seedAll();
-    expect(BACKUP_ITEMS.length).toBe(40);
+    expect(BACKUP_ITEMS.length).toBe(42);
 
     const backup = createBackup(new Date().toISOString());
 
@@ -50,7 +50,7 @@ describe("バックアップ完全性: ラウンドトリップ（37キー全数
 
     // import（復元）
     const summary = restoreBackup(backup);
-    expect(summary.restored.length).toBe(40);
+    expect(summary.restored.length).toBe(42);
 
     // 全キー・全値の一致検証（機械的ループ）
     for (const it of BACKUP_ITEMS) {
