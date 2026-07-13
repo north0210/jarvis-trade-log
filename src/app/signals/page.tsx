@@ -132,9 +132,10 @@ export default function SignalsPage() {
         {error && <p className="text-caution text-sm font-mono mt-2">{error}</p>}
       </section>
 
-      {equity && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {equity && account && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <Metric label="運用資金" value={yen(equity.capitalYen)} />
+          <Metric label="現金残高" value={yen(account.cash)} tone={account.cash >= 0 ? "neutral" : "danger"} />
           <Metric label="確定損益" value={yen(equity.realizedPnlYen)} tone={equity.realizedPnlYen >= 0 ? "profit" : "danger"} />
           <Metric label="総資産(建値評価)" value={yen(equity.equityYen)} tone={equity.equityYen >= equity.capitalYen ? "profit" : "danger"} />
           <Metric label="ドローダウン" value={`${equity.drawdownPct.toFixed(1)}%`} tone={equity.drawdownPct >= 0 ? "profit" : "danger"} />

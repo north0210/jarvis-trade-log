@@ -31,7 +31,8 @@ function stub(id: string, enterOn: string[], exitOn: string[]): TradingStrategy 
   };
 }
 
-const account = (over: Partial<PaperAccount> = {}): PaperAccount => ({ ...emptyAccount(), ...over });
+// 既定は潤沢な現金（現金ガードを無効化）。資金不足テストは cash を明示上書きする。
+const account = (over: Partial<PaperAccount> = {}): PaperAccount => ({ ...emptyAccount(), cash: 10_000_000, ...over });
 const position = (over: Partial<PaperPosition> = {}): PaperPosition => ({
   id: positionId("7203", "c", D(3)),
   code: "7203",
@@ -91,6 +92,35 @@ describe("fillPendingOrders", () => {
     const r = fillPendingOrders({ orders: [sell], seriesByCode: map1("7203", series(5)), account: account(), now: "x" });
     expect(r.log[0].outcome).toBe("skipped");
   });
+
+  it("現金不足の買い注文は skip（資金不足・現金は減らない）", () => {
+    // cost = 10株 × 125（D3 adjOpen）= 1,250。cash 1,000 → 不足で skip。
+    const r = fillPendingOrders({ orders: [buyOrder()], seriesByCode: map1("7203", series(5)), account: account({ cash: 1000 }), now: "x" });
+    expect(r.account.positions).toHaveLength(0);
+    expect(r.log[0].outcome).toBe("skipped");
+    expect(r.log[0].reason).toContain("資金不足");
+    expect(r.account.cash).toBe(1000);
+  });
+
+  it("複数注文は順に現金を消費し、尽きたら以降を skip（部分約定順序）", () => {
+    const seriesByCode = new Map([["7203", series(5)], ["9984", series(5)]]);
+    const orders = [buyOrder({ code: "7203" }), buyOrder({ code: "9984" })]; // 各 cost 1,250
+    const r = fillPendingOrders({ orders, seriesByCode, account: account({ cash: 2000 }), now: "x" });
+    expect(r.account.positions.map((p) => p.code)).toEqual(["7203"]); // 先頭のみ約定
+    expect(r.account.cash).toBe(750); // 2,000 − 1,250
+    const nine = r.log.find((l) => l.code === "9984");
+    expect(nine?.outcome).toBe("skipped");
+    expect(nine?.reason).toContain("資金不足");
+  });
+
+  it("売り約定は売却代金を現金へ戻す", () => {
+    const pos = position(); // 10株 @125
+    const sell: PaperOrder = { code: "7203", strategyId: "c", side: "sell", signalDate: D(3), shares: 10, prevClose: 130, reason: "x", positionId: pos.id };
+    // 手仕舞いは D(4) adjOpen 135 → 売却代金 1,350
+    const r = fillPendingOrders({ orders: [sell], seriesByCode: map1("7203", series(5)), account: account({ positions: [pos], cash: 500 }), now: "x" });
+    expect(r.account.positions).toHaveLength(0);
+    expect(r.account.cash).toBe(500 + 1350);
+  });
 });
 
 describe("generateDailyOrders", () => {
@@ -129,5 +159,21 @@ describe("generateDailyOrders", () => {
   it("同一 code×戦略を保有中なら新規建てしない", () => {
     const gen = generateDailyOrders({ ...base, strategies: [stub("c", [D(4)], [])], enabledIds: new Set(["c"]), entryCodes: ["7203"], account: account({ positions: [position()] }) });
     expect(gen.orders.filter((o) => o.side === "buy")).toHaveLength(0);
+  });
+  it("同時保有＋新規を splits 銘柄以内に制限（過剰発注抑制）", () => {
+    const codes = ["7203", "9984", "6758"];
+    const seriesByCode = new Map(codes.map((c) => [c, series(5)]));
+    // capital 20,000/splits 2 = 配分1万 → 1銘柄約71株（総株数リミットに当たらない）。3候補でも 2件で打ち切り。
+    const gen = generateDailyOrders({
+      ...base,
+      seriesByCode,
+      strategies: [stub("c", [D(4)], [])],
+      enabledIds: new Set(["c"]),
+      entryCodes: codes,
+      account: account(),
+      settings: { ...DEFAULT_PAPER_BROKER_SETTINGS, capitalYen: 20000, splits: 2 },
+    });
+    expect(gen.orders.filter((o) => o.side === "buy")).toHaveLength(2);
+    expect(gen.log.some((l) => l.includes("分割上限"))).toBe(true);
   });
 });

@@ -109,12 +109,22 @@ export interface PaperAccount {
   positions: PaperPosition[];
   closedTrades: PaperTrade[];
   killSwitch: KillSwitchState;
+  /** 現金残高（円）。買い約定で減算・売り約定で加算。約定時の資金ガードに使用。 */
+  cash: number;
   updatedAt: string; // ISO
 }
 
-/** 空口座を新規生成（毎回フレッシュな配列/オブジェクトを返す）。 */
+/** 空口座を新規生成（毎回フレッシュな配列/オブジェクトを返す・現金は 0）。 */
 export function emptyAccount(): PaperAccount {
-  return { positions: [], closedTrades: [], killSwitch: { ...INACTIVE_KILL_SWITCH }, updatedAt: "" };
+  return { positions: [], closedTrades: [], killSwitch: { ...INACTIVE_KILL_SWITCH }, cash: 0, updatedAt: "" };
+}
+
+/**
+ * 現金残高の後方互換初期化: 運用資金 − 建玉建値合計。
+ * cash 未保存の旧口座（本フィールド導入前）をロードする際に用いる。
+ */
+export function initialCash(positions: PaperPosition[], capitalYen: number): number {
+  return capitalYen - positions.reduce((s, p) => s + positionCostYen(p), 0);
 }
 
 // ---- 約定結果 ----

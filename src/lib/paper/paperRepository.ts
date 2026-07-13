@@ -11,6 +11,7 @@ import {
   type PaperBrokerSettings,
   type KillSwitchState,
   emptyAccount,
+  initialCash,
   DEFAULT_PAPER_BROKER_SETTINGS,
   INACTIVE_KILL_SWITCH,
 } from "./paperBroker";
@@ -51,19 +52,25 @@ function normalizeKillSwitch(v: unknown): KillSwitchState {
 
 /** 口座を読み込む（未保存/破損/形状不正時は空口座＝安全フォールバック）。 */
 export function loadPaperAccount(): PaperAccount {
+  // 現金の後方互換初期化に運用資金が必要。
+  const capitalYen = loadPaperBrokerSettings().capitalYen;
+  const fresh = (): PaperAccount => ({ ...emptyAccount(), cash: capitalYen });
   const raw = read(ACCOUNT_KEY);
-  if (!raw) return emptyAccount();
+  if (!raw) return fresh();
   try {
     const p = JSON.parse(raw) as Partial<PaperAccount>;
-    if (!Array.isArray(p.positions) || !Array.isArray(p.closedTrades)) return emptyAccount();
+    if (!Array.isArray(p.positions) || !Array.isArray(p.closedTrades)) return fresh();
+    // cash 未保存の旧口座は「運用資金 − 建玉建値合計」で初期化（後方互換）。
+    const cash = typeof p.cash === "number" ? p.cash : initialCash(p.positions, capitalYen);
     return {
       positions: p.positions,
       closedTrades: p.closedTrades,
       killSwitch: normalizeKillSwitch(p.killSwitch),
+      cash,
       updatedAt: typeof p.updatedAt === "string" ? p.updatedAt : "",
     };
   } catch {
-    return emptyAccount();
+    return fresh();
   }
 }
 

@@ -14,6 +14,7 @@ import {
   applyBuyFill,
   applySellFill,
   emptyAccount,
+  initialCash,
   positionId,
   HARD_LIMIT_PER_NAME_YEN,
   HARD_LIMIT_TOTAL_SHARES,
@@ -60,6 +61,11 @@ describe("資金管理（allocation / shares）", () => {
   });
   it("不正設定（資金/分割0以下）は 0", () => {
     expect(allocationPerNameYen(settings({ splits: 0 }))).toBe(0);
+  });
+
+  it("initialCash = 運用資金 − 建玉建値合計（後方互換初期化）", () => {
+    expect(initialCash([], 500_000)).toBe(500_000); // 建玉なし → 全額現金
+    expect(initialCash([position({ shares: 100, entryPrice: 1010 })], 500_000)).toBe(399_000); // 500,000 − 100×1010
   });
 
   it("株数 = floor(配分額 ÷ 前日終値)", () => {

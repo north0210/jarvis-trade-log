@@ -24,6 +24,7 @@ import {
   allocationPerNameYen,
   computeShares,
   totalOpenShares,
+  positionCostYen,
 } from "./paperBroker";
 
 // ---- 系列ヘルパー ----
@@ -104,10 +105,18 @@ export function fillPendingOrders(params: {
     if (order.side === "buy") {
       const r = fillBuyOrder({ order, openPrice: bar.price, fillDate: bar.date, currentTotalShares: totalOpenShares(account.positions) });
       if (r.outcome === "filled" && r.position) {
-        account = applyBuyFill(account, r.position, params.now);
+        // 現金ガード: 約定額が現金残高を超える注文は skip（資金不足）。破棄する。
+        const cost = positionCostYen(r.position);
+        if (cost > account.cash) {
+          log.push({ code: order.code, side: "buy", outcome: "skipped", date: bar.date, reason: `資金不足（現金¥${Math.round(account.cash)} < 必要¥${Math.round(cost)}）` });
+          continue;
+        }
+        account = { ...applyBuyFill(account, r.position, params.now), cash: account.cash - cost };
         if (bar.substitute) substituteFills++;
+        log.push({ code: order.code, side: "buy", outcome: "filled", date: bar.date, reason: order.reason });
+      } else {
+        log.push({ code: order.code, side: "buy", outcome: r.outcome, date: bar.date, reason: r.reason || order.reason });
       }
-      log.push({ code: order.code, side: "buy", outcome: r.outcome, date: bar.date, reason: r.reason || order.reason });
     } else {
       const pos = account.positions.find((p) => p.id === order.positionId);
       if (!pos) {
@@ -116,7 +125,8 @@ export function fillPendingOrders(params: {
       }
       const r = fillSellOrder({ position: pos, openPrice: bar.price, fillDate: bar.date, exitReason: order.reason });
       if (r.outcome === "filled" && r.trade) {
-        account = applySellFill(account, pos.id, r.trade, params.now);
+        // 売却代金を現金へ戻す。
+        account = { ...applySellFill(account, pos.id, r.trade, params.now), cash: account.cash + r.trade.exitPrice * r.trade.shares };
         if (bar.substitute) substituteFills++;
         log.push({ code: order.code, side: "sell", outcome: "filled", date: bar.date, reason: order.reason });
       } else if (r.outcome === "lapsed") {
@@ -170,6 +180,11 @@ export function generateDailyOrders(params: {
   let reservedShares =
     totalOpenShares(params.account.positions) + params.existingOrders.filter((o) => o.side === "buy").reduce((n, o) => n + o.shares, 0);
 
+  // 分割上限: 同時保有（保有ポジション＋キュー内の未約定買い）＋新規 を splits 銘柄以内に制限（過剰発注抑制）。
+  const maxSlots = params.settings.splits > 0 ? params.settings.splits : 0;
+  let slotsUsed = params.account.positions.length + params.existingOrders.filter((o) => o.side === "buy").length;
+  let cappedLogged = false;
+
   // 1) 手仕舞い（保有ポジション）。
   for (const pos of params.account.positions) {
     if (pendingSellPosIds.has(pos.id)) continue;
@@ -187,14 +202,28 @@ export function generateDailyOrders(params: {
     }
   }
 
-  // 2) 新規建て（有効戦略のみ・未保有・キュー未登録）。
+  // 2) 新規建て（有効戦略のみ・未保有・キュー未登録・分割上限内）。
+  const logCapOnce = () => {
+    if (!cappedLogged) {
+      log.push(`分割上限（同時保有 ${maxSlots} 銘柄）に達したため新規建てを抑制しました。`);
+      cappedLogged = true;
+    }
+  };
   for (const code of params.entryCodes) {
+    if (slotsUsed >= maxSlots) {
+      logCapOnce();
+      break;
+    }
     const series = params.seriesByCode.get(code);
     if (!series) continue;
     const bars = toStrategyBars(series);
     if (bars.length === 0) continue;
     const last = bars[bars.length - 1];
     for (const strat of params.strategies) {
+      if (slotsUsed >= maxSlots) {
+        logCapOnce();
+        break;
+      }
       if (!params.enabledIds.has(strat.id)) continue;
       const key = `${strat.id}:${code}`;
       if (heldKeys.has(key) || pendingBuyKeys.has(key)) continue;
@@ -207,6 +236,7 @@ export function generateDailyOrders(params: {
       }
       orders.push({ code, strategyId: strat.id, side: "buy", signalDate: last.date, shares, prevClose: last.close, reason: sig.reason });
       reservedShares += shares;
+      slotsUsed += 1;
       log.push(`建て: ${code}（${strat.name}）${shares}株 ${sig.reason}`);
     }
   }
