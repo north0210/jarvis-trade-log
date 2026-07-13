@@ -11,7 +11,8 @@
     "service:stop": "launchctl unload ~/Library/LaunchAgents/com.jarvis.tradelog.plist",
     "service:start": "launchctl load -w ~/Library/LaunchAgents/com.jarvis.tradelog.plist",
     "lint": "next lint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "sweep": "vite-node -c vitest.config.ts scripts/sweep.ts --"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

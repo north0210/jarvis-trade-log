@@ -36,3 +36,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# sweep 生成物（系列キャッシュ・結果CSV）
+scripts/tmp/

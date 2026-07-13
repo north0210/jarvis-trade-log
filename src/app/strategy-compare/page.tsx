@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getStockRepository } from "@/lib/storage/stockRepository";
 import { getProviderMode, getJQuantsCredentials } from "@/lib/pricing/settings";
 import { fetchJQuantsSeries, describeSeriesFailure } from "@/lib/pricing/jquantsClient";
-import type { SeriesPoint } from "@/lib/analytics/priceCache";
+import { getCachedSeries, type SeriesPoint } from "@/lib/analytics/priceCache";
 import { loadScreenerSnapshot } from "@/lib/screener/screenerRepository";
 import { STRATEGIES } from "@/lib/strategy/strategies";
 import {
@@ -101,11 +101,51 @@ export default function StrategyComparePage() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<StrategyComparisonResult | null>(null);
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
 
   useEffect(() => {
     setResult(loadStrategyComparison());
     buildUniverse().then(setUniverse);
   }, []);
+
+  // スイープCLI用に、キャッシュ済み系列を scripts/tmp/series-cache.json へ書き出す（API 再取得なし）。
+  const exportForSweep = async () => {
+    const codes = await buildUniverse();
+    const years = PERIODS.find((p) => p.key === periodKey)?.years ?? 5;
+    const to = new Date();
+    const from = new Date(to.getFullYear() - years, to.getMonth(), to.getDate());
+    const fromStr = fmtDate(from);
+    const toStr = fmtDate(to);
+
+    const perCode: { code: string; series: SeriesPoint[] }[] = [];
+    let effFrom: string | null = null;
+    let effTo: string | null = null;
+    for (const code of codes) {
+      const s = getCachedSeries(code, fromStr, toStr, { requireOpen: true });
+      if (s && s.length > 0) {
+        perCode.push({ code, series: s });
+        for (const p of s) {
+          if (effFrom === null || p.date < effFrom) effFrom = p.date;
+          if (effTo === null || p.date > effTo) effTo = p.date;
+        }
+      }
+    }
+    if (perCode.length === 0) {
+      setExportMsg("キャッシュ済み系列がありません。先に「比較を実行」してください。");
+      return;
+    }
+    try {
+      const res = await fetch("/api/dev/sweep-export", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ from: effFrom ?? fromStr, to: effTo ?? toStr, perCode }),
+      });
+      const j = await res.json();
+      setExportMsg(j.ok ? `エクスポート完了: ${j.codes}銘柄 / ${j.points}点 → ${j.file}。ターミナルで npm run sweep -- --strategy C を実行できます。` : `失敗: ${j.message}`);
+    } catch (e) {
+      setExportMsg(`失敗: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
 
   const run = async () => {
     if (getProviderMode() !== "jquants-ready") {
@@ -212,12 +252,17 @@ export default function StrategyComparePage() {
           <button className="hud-btn" onClick={run} disabled={running}>
             {running ? (progress ? `取得中 ${progress.done}/${progress.total}` : "実行中…") : "比較を実行"}
           </button>
+          <button className="hud-btn" onClick={exportForSweep} disabled={running} title="キャッシュ済み系列を scripts/tmp へ書き出し（API再取得なし）">
+            スイープ用に系列をエクスポート
+          </button>
           <span className="text-arcdim text-xs">対象 {universe.length} 銘柄（スクリーナー上位＋ウォッチリスト・最大{MAX_UNIVERSE}）</span>
         </div>
         <p className="text-arcdim text-xs mt-2">
           3戦略（A/B/C）を同一条件で一括比較します。シグナルは調整後終値で判定し、翌営業日始値で仮想約定（手数料0・端数切捨て）。
           始値が無い日は終値で代用約定します。初回・全更新は数分程度（約{JQUANTS_EFFECTIVE_RPM}リクエスト/分）。
+          エクスポート後は <code className="text-arc">npm run sweep -- --strategy C</code>（または B）でパラメータ感度分析を実行できます。
         </p>
+        {exportMsg && <p className="text-arc text-xs mt-2 font-mono">{exportMsg}</p>}
         {error && <p className="text-caution text-sm mt-2 font-mono">{error}</p>}
       </section>
 
