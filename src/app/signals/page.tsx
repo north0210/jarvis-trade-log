@@ -150,7 +150,7 @@ export default function SignalsPage() {
           <Metric label="現金残高" value={yen(account.cash)} tone={account.cash >= 0 ? "neutral" : "danger"} />
           <Metric label="確定損益" value={yen(equity.realizedPnlYen)} tone={equity.realizedPnlYen >= 0 ? "profit" : "danger"} />
           <Metric label={equityLabel} value={yen(equity.equityYen)} tone={equity.equityYen >= equity.capitalYen ? "profit" : "danger"} />
-          <Metric label="ドローダウン" value={`${equity.drawdownPct.toFixed(1)}%`} tone={equity.drawdownPct >= 0 ? "profit" : "danger"} />
+          <Metric label="ドローダウン" value={`${equity.drawdownPct.toFixed(1)}%`} tone={equity.drawdownPct > 0 ? "danger" : "profit"} />
         </div>
       )}
 

@@ -297,7 +297,7 @@ export interface EquitySnapshot {
   unrealizedPnlYen: number;
   /** 総資産 = 運用資金 + 確定損益 + 含み損益（手数料 0 前提）。 */
   equityYen: number;
-  /** 運用資金比のドローダウン（%）。 */
+  /** 運用資金比のドローダウン（%・非負）。equity ≥ 運用資金 なら 0（含み益局面を損失表示しない）。 */
   drawdownPct: number;
   /** 取得価格で値洗いした建玉数（マーク成功）。 */
   markedCount: number;
@@ -328,14 +328,17 @@ export function computeEquity(
   }
   const capital = settings.capitalYen;
   const equity = capital + realized + unrealized;
-  const drawdownPct = capital > 0 ? ((equity - capital) / capital) * 100 : 0;
+  // ドローダウンは「基準（運用資金）をどれだけ下回ったか」の非負値。equity ≥ 基準 なら 0.0%。
+  // 含み益局面（equity > capital）を損失として誤表示／誤発動しないよう符号を厳密に扱う。
+  const drawdownPct = capital > 0 ? Math.max(0, ((capital - equity) / capital) * 100) : 0;
   return { capitalYen: capital, realizedPnlYen: realized, unrealizedPnlYen: unrealized, equityYen: equity, drawdownPct, markedCount, fallbackCount };
 }
 
 /**
  * キルスイッチを評価する（純関数）。
  * - 既に発動中なら現状維持（明示再開まで解除しない）。
- * - ドローダウンが -killSwitchDrawdownPct% 以下で新規発動。
+ * - ドローダウン（非負）が killSwitchDrawdownPct% 以上で新規発動。
+ *   drawdownPct は equity ≥ 運用資金 のとき 0 のため、含み益局面では発動し得ない。
  */
 export function evaluateKillSwitch(
   account: PaperAccount,
@@ -345,11 +348,11 @@ export function evaluateKillSwitch(
 ): KillSwitchState {
   if (account.killSwitch.active) return account.killSwitch;
   const eq = computeEquity(account, settings, priceByCode);
-  const threshold = -Math.abs(settings.killSwitchDrawdownPct);
-  if (eq.drawdownPct <= threshold) {
+  const threshold = Math.abs(settings.killSwitchDrawdownPct);
+  if (eq.drawdownPct >= threshold) {
     return {
       active: true,
-      reason: `総資産が運用資金比 ${eq.drawdownPct.toFixed(1)}%（閾値 ${threshold}%）に達したためシグナル生成を停止しました。`,
+      reason: `総資産が運用資金比 -${eq.drawdownPct.toFixed(1)}%（閾値 -${threshold}%）に達したためシグナル生成を停止しました。`,
       triggeredAt: now,
       drawdownPctAtTrigger: eq.drawdownPct,
     };

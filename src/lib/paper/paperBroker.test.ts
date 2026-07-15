@@ -165,6 +165,7 @@ describe("総資産（equity）とキルスイッチ", () => {
     expect(eq.equityYen).toBe(500_000 + 2000 + 5000);
     expect(eq.markedCount).toBe(1);
     expect(eq.fallbackCount).toBe(0);
+    expect(eq.drawdownPct).toBe(0); // equity > 運用資金 → DD は 0
   });
   it("現在値が取得できない銘柄は建値評価（含み損益0）", () => {
     const acc = accountWith({ positions: [position({ shares: 100, entryPrice: 1000, code: "7203" })] });
@@ -189,13 +190,34 @@ describe("総資産（equity）とキルスイッチ", () => {
     expect(eq.fallbackCount).toBe(1);
   });
 
-  it("ドローダウン -10% 以下でキルスイッチ発動", () => {
-    // 含み損 -60,000円（資金比 -12%）→ 発動
+  it("含み益局面は DD=0（含み益率を DD として誤表示しない）", () => {
+    // equity 517,107（+3.42%）でも DD は 0.0%。
+    const acc = accountWith({ positions: [position({ shares: 100, entryPrice: 1000, code: "7203" })] });
+    const eq = computeEquity(acc, settings(), new Map([["7203", 1171.07]]));
+    expect(eq.equityYen).toBeCloseTo(517_107, 0);
+    expect(eq.drawdownPct).toBe(0);
+  });
+  it("含み益局面ではキルスイッチが誤発動しない", () => {
+    const acc = accountWith({ positions: [position({ shares: 100, entryPrice: 1000, code: "7203" })] });
+    const ks = evaluateKillSwitch(acc, settings(), new Map([["7203", 1171.07]]), "2026-07-15"); // +3.42%
+    expect(ks.active).toBe(false);
+  });
+  it("ドローダウン -10% 以下でキルスイッチ発動（DD は非負の大きさ）", () => {
+    // 含み損 -60,000円（資金比 -12%）→ 発動。drawdownPctAtTrigger は正の 12。
     const acc = accountWith({ positions: [position({ shares: 100, entryPrice: 1000, code: "7203" })] });
     const ks = evaluateKillSwitch(acc, settings(), new Map([["7203", 400]]), "2026-04-10T00:00:00.000Z");
     expect(ks.active).toBe(true);
     expect(ks.reason).toContain("停止");
-    expect(ks.drawdownPctAtTrigger).toBeCloseTo(-12, 6);
+    expect(ks.drawdownPctAtTrigger).toBeCloseTo(12, 6);
+  });
+  it("境界: ちょうど -10% は発動、-9.9% は非発動", () => {
+    // 建玉100株@1000。含み損 -50,000（-10%）でちょうど発動。
+    const acc = accountWith({ positions: [position({ shares: 100, entryPrice: 1000, code: "7203" })] });
+    const atThreshold = evaluateKillSwitch(acc, settings(), new Map([["7203", 500]]), "2026-04-10"); // -10%
+    expect(atThreshold.active).toBe(true);
+    expect(atThreshold.drawdownPctAtTrigger).toBeCloseTo(10, 6);
+    const justUnder = evaluateKillSwitch(acc, settings(), new Map([["7203", 505]]), "2026-04-10"); // -9.9%
+    expect(justUnder.active).toBe(false);
   });
   it("ドローダウンが閾値未満なら発動しない", () => {
     const acc = accountWith({ positions: [position({ shares: 100, entryPrice: 1000, code: "7203" })] });
