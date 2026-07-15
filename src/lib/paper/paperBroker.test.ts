@@ -163,12 +163,30 @@ describe("総資産（equity）とキルスイッチ", () => {
     expect(eq.realizedPnlYen).toBe(2000);
     expect(eq.unrealizedPnlYen).toBe(5000); // (1050-1000)*100
     expect(eq.equityYen).toBe(500_000 + 2000 + 5000);
+    expect(eq.markedCount).toBe(1);
+    expect(eq.fallbackCount).toBe(0);
   });
   it("現在値が取得できない銘柄は建値評価（含み損益0）", () => {
     const acc = accountWith({ positions: [position({ shares: 100, entryPrice: 1000, code: "7203" })] });
     const eq = computeEquity(acc, settings(), new Map()); // 価格なし
     expect(eq.unrealizedPnlYen).toBe(0);
     expect(eq.equityYen).toBe(500_000);
+    expect(eq.markedCount).toBe(0);
+    expect(eq.fallbackCount).toBe(1);
+  });
+  it("一部銘柄のみ取得成功（値洗い＋建値評価の混在）", () => {
+    const acc = accountWith({
+      positions: [
+        position({ shares: 100, entryPrice: 1000, code: "7203" }), // 値洗い: (1100-1000)*100 = +10,000
+        position({ shares: 50, entryPrice: 2000, code: "6758" }), // 価格なし → 建値評価（含み損益0）
+      ],
+    });
+    // 6758 は 0 価格（無効値）で渡し、建値フォールバックされることも確認。
+    const eq = computeEquity(acc, settings(), new Map<string, number | null>([["7203", 1100], ["6758", 0]]));
+    expect(eq.unrealizedPnlYen).toBe(10_000);
+    expect(eq.equityYen).toBe(510_000);
+    expect(eq.markedCount).toBe(1);
+    expect(eq.fallbackCount).toBe(1);
   });
 
   it("ドローダウン -10% 以下でキルスイッチ発動", () => {

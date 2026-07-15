@@ -18,6 +18,7 @@ import {
 
 const ACCOUNT_KEY = K.paperBrokerAccount;
 const SETTINGS_KEY = K.paperBrokerSettings;
+const VALUATION_KEY = K.paperValuationSnapshot;
 
 function read(key: string): string | null {
   if (typeof window === "undefined") return null;
@@ -105,4 +106,47 @@ export function savePaperBrokerSettings(patch: Partial<PaperBrokerSettings>): Pa
   const merged = { ...loadPaperBrokerSettings(), ...patch };
   write(SETTINGS_KEY, JSON.stringify(merged));
   return merged;
+}
+
+// ---- 値洗いスナップショット（表示とキルスイッチの評価基準を単一化） ----
+
+/**
+ * エンジン実行時に構築した「銘柄別最新終値と評価日」。
+ * キルスイッチ評価に使った priceByCode をそのまま保存し、ページ再訪時も同じ価格で値洗い表示する。
+ * 再取得で再生成可能なためバックアップ対象外（keys.ts で regenerable）。
+ */
+export interface ValuationSnapshot {
+  /** 値洗いに用いた最新終値の評価日（YYYY-MM-DD・priced 銘柄の最遅終値日）。 */
+  asOf: string;
+  /** 銘柄コード → 最新調整後終値（正の有限値のみ）。 */
+  prices: Record<string, number>;
+}
+
+/** 値洗いスナップショットを読み込む（未保存/破損/形状不正時は null）。 */
+export function loadValuationSnapshot(): ValuationSnapshot | null {
+  const raw = read(VALUATION_KEY);
+  if (!raw) return null;
+  try {
+    const p = JSON.parse(raw) as Partial<ValuationSnapshot>;
+    if (typeof p.asOf !== "string" || typeof p.prices !== "object" || p.prices === null) return null;
+    const prices: Record<string, number> = {};
+    for (const [code, v] of Object.entries(p.prices as Record<string, unknown>)) {
+      if (typeof v === "number" && Number.isFinite(v) && v > 0) prices[code] = v;
+    }
+    return { asOf: p.asOf, prices };
+  } catch {
+    return null;
+  }
+}
+
+/** 値洗いスナップショットを保存する。 */
+export function saveValuationSnapshot(snap: ValuationSnapshot): void {
+  write(VALUATION_KEY, JSON.stringify(snap));
+}
+
+/** ValuationSnapshot → computeEquity 用の priceByCode（null なら空 Map＝全建値評価）。 */
+export function valuationPriceMap(snap: ValuationSnapshot | null): Map<string, number | null> {
+  const m = new Map<string, number | null>();
+  if (snap) for (const [code, px] of Object.entries(snap.prices)) m.set(code, px);
+  return m;
 }

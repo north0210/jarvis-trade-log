@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import PageIntro from "@/components/PageIntro";
 import { getProviderMode } from "@/lib/pricing/settings";
 import { STRATEGIES } from "@/lib/strategy/strategies";
-import { loadPaperAccount, savePaperAccount, loadPaperBrokerSettings } from "@/lib/paper/paperRepository";
+import { loadPaperAccount, savePaperAccount, loadPaperBrokerSettings, loadValuationSnapshot, valuationPriceMap, type ValuationSnapshot } from "@/lib/paper/paperRepository";
 import { computeEquity, resumeKillSwitch, type PaperAccount, type PaperBrokerSettings } from "@/lib/paper/paperBroker";
 import { loadOrderQueue } from "@/lib/paper/signalEngineRepository";
 import {
@@ -38,6 +38,7 @@ export default function SignalsPage() {
   const [settings, setSettings] = useState<PaperBrokerSettings | null>(null);
   const [engine, setEngine] = useState<SignalEngineSettings | null>(null);
   const [queue, setQueue] = useState<PaperOrder[]>([]);
+  const [valuation, setValuation] = useState<ValuationSnapshot | null>(null);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [result, setResult] = useState<RunSignalEngineResult | null>(null);
@@ -48,16 +49,27 @@ export default function SignalsPage() {
     setSettings(loadPaperBrokerSettings());
     setEngine(loadSignalEngineSettings());
     setQueue(loadOrderQueue());
+    setValuation(loadValuationSnapshot());
   };
 
   useEffect(() => {
     refresh();
   }, []);
 
+  // キルスイッチ評価と同一の値洗い価格（エンジンが永続化した priceByCode 相当）で総資産/DDを算出。
+  // エンジン未実行/価格未取得の建玉は建値評価にフォールバックする。
   const equity = useMemo(() => {
     if (!account || !settings) return null;
-    return computeEquity(account, settings, new Map()); // 現在値未取得 → 建値評価
-  }, [account, settings]);
+    return computeEquity(account, settings, valuationPriceMap(valuation));
+  }, [account, settings, valuation]);
+
+  // 表示ラベルを動的化: 全建玉を値洗い済みなら評価日を明示、未取得があれば建値評価＋件数を明示。
+  const equityLabel =
+    equity && equity.fallbackCount === 0
+      ? valuation
+        ? `総資産(${valuation.asOf}終値評価)`
+        : "総資産(建値評価)"
+      : `総資産(建値評価・価格未取得${equity?.fallbackCount ?? 0}銘柄)`;
 
   const toggleStrategy = (id: string, on: boolean) => {
     setEngine(saveSignalEngineSettings({ strategyEnabled: { [id]: on } }));
@@ -137,7 +149,7 @@ export default function SignalsPage() {
           <Metric label="運用資金" value={yen(equity.capitalYen)} />
           <Metric label="現金残高" value={yen(account.cash)} tone={account.cash >= 0 ? "neutral" : "danger"} />
           <Metric label="確定損益" value={yen(equity.realizedPnlYen)} tone={equity.realizedPnlYen >= 0 ? "profit" : "danger"} />
-          <Metric label="総資産(建値評価)" value={yen(equity.equityYen)} tone={equity.equityYen >= equity.capitalYen ? "profit" : "danger"} />
+          <Metric label={equityLabel} value={yen(equity.equityYen)} tone={equity.equityYen >= equity.capitalYen ? "profit" : "danger"} />
           <Metric label="ドローダウン" value={`${equity.drawdownPct.toFixed(1)}%`} tone={equity.drawdownPct >= 0 ? "profit" : "danger"} />
         </div>
       )}

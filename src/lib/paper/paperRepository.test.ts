@@ -6,6 +6,10 @@ import {
   savePaperAccount,
   loadPaperBrokerSettings,
   savePaperBrokerSettings,
+  loadValuationSnapshot,
+  saveValuationSnapshot,
+  valuationPriceMap,
+  type ValuationSnapshot,
 } from "./paperRepository";
 import { emptyAccount, DEFAULT_PAPER_BROKER_SETTINGS, type PaperAccount } from "./paperBroker";
 
@@ -76,5 +80,39 @@ describe("paperRepository: 資金管理設定", () => {
   it("不正値（0以下・型不一致）は既定へ補完", () => {
     window.localStorage.setItem(K.paperBrokerSettings, JSON.stringify({ capitalYen: -1, splits: "x", killSwitchDrawdownPct: 0 }));
     expect(loadPaperBrokerSettings()).toEqual(DEFAULT_PAPER_BROKER_SETTINGS);
+  });
+});
+
+describe("paperRepository: 値洗いスナップショット", () => {
+  const snap: ValuationSnapshot = { asOf: "2026-07-15", prices: { "7203": 1100, "6758": 2050 } };
+
+  it("未保存なら null（→ 全建値評価フォールバック）", () => {
+    expect(loadValuationSnapshot()).toBeNull();
+    expect(valuationPriceMap(null).size).toBe(0);
+  });
+  it("保存 → 読込でラウンドトリップ", () => {
+    saveValuationSnapshot(snap);
+    expect(loadValuationSnapshot()).toEqual(snap);
+  });
+  it("K.paperValuationSnapshot キーに保存される", () => {
+    saveValuationSnapshot(snap);
+    expect(window.localStorage.getItem(K.paperValuationSnapshot)).toBeTruthy();
+  });
+  it("破損 JSON は null へフォールバック", () => {
+    window.localStorage.setItem(K.paperValuationSnapshot, "{ broken");
+    expect(loadValuationSnapshot()).toBeNull();
+  });
+  it("不正価格（0・負・非数）は除外して読み込む", () => {
+    window.localStorage.setItem(
+      K.paperValuationSnapshot,
+      JSON.stringify({ asOf: "2026-07-15", prices: { "7203": 1100, "6758": 0, "9984": -5, "8035": "x" } })
+    );
+    expect(loadValuationSnapshot()).toEqual({ asOf: "2026-07-15", prices: { "7203": 1100 } });
+  });
+  it("valuationPriceMap は computeEquity 用 Map を返す", () => {
+    const m = valuationPriceMap(snap);
+    expect(m.get("7203")).toBe(1100);
+    expect(m.get("6758")).toBe(2050);
+    expect(m.size).toBe(2);
   });
 });

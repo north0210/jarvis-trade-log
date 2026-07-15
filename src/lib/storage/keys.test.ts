@@ -52,6 +52,7 @@ const EXPECTED_KEYS = [
   "jarvis-trade-log:paper-broker-account",
   "jarvis-trade-log:paper-broker-settings",
   "jarvis-trade-log:paper-order-queue",
+  "jarvis-trade-log:paper-valuation-snapshot",
   "jarvis-trade-log:performance-mode",
   "jarvis-trade-log:price-cache:",
   "jarvis-trade-log:price-provider-mode",
@@ -80,21 +81,21 @@ const EXPECTED_KEYS = [
 ];
 
 describe("KEY_REGISTRY: キー集合のスナップショット固定", () => {
-  it("全 storageKey が期待リスト（55エントリ）と過不足なく一致", () => {
+  it("全 storageKey が期待リスト（56エントリ）と過不足なく一致", () => {
     const actual = KEY_REGISTRY.map((k) => k.storageKey).sort();
     expect(actual).toEqual(EXPECTED_KEYS);
   });
 
-  it("エントリ総数 = 55（具体キー54 + 動的プレフィックス1）", () => {
-    expect(KEY_REGISTRY.length).toBe(55);
-    expect(EXPECTED_KEYS.length).toBe(55);
+  it("エントリ総数 = 56（具体キー55 + 動的プレフィックス1）", () => {
+    expect(KEY_REGISTRY.length).toBe(56);
+    expect(EXPECTED_KEYS.length).toBe(56);
   });
 
   it("動的プレフィックスは price-cache: のみ（それ以外は具体キー）", () => {
     const prefixEntries = KEY_REGISTRY.map((k) => k.storageKey).filter((k) => k.endsWith(":"));
     expect(prefixEntries).toEqual([PRICE_CACHE_PREFIX]);
-    // 具体キー数 = 54
-    expect(KEY_REGISTRY.length - prefixEntries.length).toBe(54);
+    // 具体キー数 = 55
+    expect(KEY_REGISTRY.length - prefixEntries.length).toBe(55);
   });
 });
 
@@ -138,7 +139,7 @@ describe("K（名前付きキー定数）: KEY_REGISTRY からの導出整合", 
 
   it("K は全キー（refName ベース・55エントリ）を収録", () => {
     expect(Object.keys(K).length).toBe(KEY_REGISTRY.length);
-    expect(Object.keys(K).length).toBe(55);
+    expect(Object.keys(K).length).toBe(56);
   });
 
   it("K の全値が jarvis-trade-log: プレフィックスを持つ", () => {
@@ -298,6 +299,7 @@ describe("refName（A-1: 参照識別子）の固定化", () => {
       "jarvis-trade-log:market-calendar": "marketCalendar",
       "jarvis-trade-log:market-universe": "marketUniverse",
       "jarvis-trade-log:screener-snapshot": "screenerSnapshot",
+      "jarvis-trade-log:paper-valuation-snapshot": "paperValuationSnapshot",
     };
     const excluded = KEY_REGISTRY.filter((k) => !k.backupKey);
     // 除外キーの集合が期待どおり（過不足なし）

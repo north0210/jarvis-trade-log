@@ -11,7 +11,7 @@ import { getProviderMode, getJQuantsCredentials } from "@/lib/pricing/settings";
 import { loadScreenerSnapshot } from "@/lib/screener/screenerRepository";
 import { getStockRepository } from "@/lib/storage/stockRepository";
 import { STRATEGIES } from "@/lib/strategy/strategies";
-import { loadPaperAccount, savePaperAccount, loadPaperBrokerSettings } from "./paperRepository";
+import { loadPaperAccount, savePaperAccount, loadPaperBrokerSettings, saveValuationSnapshot } from "./paperRepository";
 import { evaluateKillSwitch, type KillSwitchState } from "./paperBroker";
 import { fillPendingOrders, generateDailyOrders, type FillLogEntry } from "./signalEngine";
 import { loadOrderQueue, saveOrderQueue, loadSignalEngineSettings, enabledStrategyIds } from "./signalEngineRepository";
@@ -95,11 +95,19 @@ export async function runSignalEngine(opts?: {
   const fill = fillPendingOrders({ orders: queue, seriesByCode, account: account0, now: nowIso });
   let account = fill.account;
 
-  // 2) キルスイッチ評価（最新終値でマーク）。
+  // 2) キルスイッチ評価（最新終値でマーク）。表示と同一基準にするため priceByCode を永続化する。
   const priceByCode = new Map<string, number | null>();
+  const valuationPrices: Record<string, number> = {};
+  let valuationAsOf = "";
   seriesByCode.forEach((series, code) => {
     const closes = series.filter((p) => p.adjClose != null);
-    priceByCode.set(code, closes.length ? (closes[closes.length - 1].adjClose as number) : null);
+    const last = closes.length ? closes[closes.length - 1] : null;
+    const px = last ? (last.adjClose as number) : null;
+    priceByCode.set(code, px);
+    if (last && typeof px === "number" && px > 0) {
+      valuationPrices[code] = px;
+      if (last.date > valuationAsOf) valuationAsOf = last.date; // priced 銘柄の最遅終値日
+    }
   });
   const killSwitch = evaluateKillSwitch(account, brokerSettings, priceByCode, nowIso);
   account = { ...account, killSwitch };
@@ -116,10 +124,11 @@ export async function runSignalEngine(opts?: {
     existingOrders: fill.remaining,
   });
 
-  // 4) 永続化（キュー＝残保留＋新規注文 / 口座）。
+  // 4) 永続化（キュー＝残保留＋新規注文 / 口座 / 値洗いスナップショット）。
   const newQueue = [...fill.remaining, ...gen.orders];
   saveOrderQueue(newQueue);
   savePaperAccount({ ...account, updatedAt: nowIso });
+  saveValuationSnapshot({ asOf: valuationAsOf || toStr, prices: valuationPrices });
 
   const filledCount = fill.log.filter((l) => l.outcome === "filled").length;
   const failNote = firstFail ? `／取得失敗 ${fetchFailed}（${describeSeriesFailure(firstFail, firstFail.code)}）` : fetchFailed ? `／取得失敗 ${fetchFailed}` : "";

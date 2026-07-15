@@ -299,6 +299,10 @@ export interface EquitySnapshot {
   equityYen: number;
   /** 運用資金比のドローダウン（%）。 */
   drawdownPct: number;
+  /** 取得価格で値洗いした建玉数（マーク成功）。 */
+  markedCount: number;
+  /** 価格未取得で建値評価にフォールバックした建玉数。 */
+  fallbackCount: number;
 }
 
 /**
@@ -312,15 +316,20 @@ export function computeEquity(
 ): EquitySnapshot {
   const realized = account.closedTrades.reduce((s, t) => s + t.pnlYen, 0);
   let unrealized = 0;
+  let markedCount = 0;
+  let fallbackCount = 0;
   for (const p of account.positions) {
     const px = priceByCode.get(p.code);
-    const mark = typeof px === "number" && px > 0 ? px : p.entryPrice; // 取得不能は建値評価
+    const marked = typeof px === "number" && px > 0;
+    const mark = marked ? (px as number) : p.entryPrice; // 取得不能は建値評価
+    if (marked) markedCount++;
+    else fallbackCount++;
     unrealized += (mark - p.entryPrice) * p.shares;
   }
   const capital = settings.capitalYen;
   const equity = capital + realized + unrealized;
   const drawdownPct = capital > 0 ? ((equity - capital) / capital) * 100 : 0;
-  return { capitalYen: capital, realizedPnlYen: realized, unrealizedPnlYen: unrealized, equityYen: equity, drawdownPct };
+  return { capitalYen: capital, realizedPnlYen: realized, unrealizedPnlYen: unrealized, equityYen: equity, drawdownPct, markedCount, fallbackCount };
 }
 
 /**
